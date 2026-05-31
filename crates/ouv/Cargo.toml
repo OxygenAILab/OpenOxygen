@@ -1,0 +1,23 @@
+[package]
+name = "openoxygen-ouv"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+openoxygen-core = { path = "../core" }
+openoxygen-memory = { path = "../memory" }
+openoxygen-vlm-connector = { path = "../vlm-connector" }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+image = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"

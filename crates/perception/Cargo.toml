@@ -1,0 +1,24 @@
+[package]
+name = "openoxygen-perception"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+openoxygen-core = { path = "../core" }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+image = { workspace = true }
+
+# OCR support
+tesseract = "0.16"
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -1,0 +1,18 @@
+OpenOxygen Next
+Version: 1.26.149-next-20260530
+Internal: (1149)
+Build Date: 2026-05-30
+Codename: Mercury
+
+Release Notes:
+- Phase 2 Complete: Core architecture and implementation
+- Windows UIA integration
+- Tesseract OCR engine
+- GPT-4V VLM support
+- SQLite persistence with FTS
+- HTN planning with execution engine
+- Playwright browser automation
+- 20+ built-in skills
+
+License: MIT
+Repository: https://github.com/StarsailsClover/OpenOxygen
