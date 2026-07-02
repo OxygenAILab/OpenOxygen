@@ -4,11 +4,11 @@
  * Next-generation Computer Use Agent Framework
  */
 
-import { TaskOrchestrator, TaskRequest, TaskResponse } from './orchestrator';
+import { TaskOrchestrator, TaskRequest, TaskResponse } from './orchestrator/mod';
 import { LLMGateway, LLMConfig } from './llm/gateway';
 import { SkillRegistry } from './skills/registry';
 
-export * from './orchestrator';
+export * from './orchestrator/mod';
 export * from './llm/gateway';
 export * from './skills/registry';
 
@@ -19,6 +19,8 @@ export interface OpenOxygenConfig {
   enableCli?: boolean;
   maxRetries?: number;
   enableReflection?: boolean;
+  mode?: 'auto' | 'gui' | 'cli';
+  priority?: 'critical' | 'high' | 'normal' | 'low';
 }
 
 /**
@@ -28,10 +30,8 @@ export class OpenOxygen {
   private orchestrator: TaskOrchestrator;
   private llm: LLMGateway;
   private skills: SkillRegistry;
-  private config: OpenOxygenConfig;
 
   constructor(config: OpenOxygenConfig) {
-    this.config = config;
     this.llm = new LLMGateway(config.llm);
     this.skills = new SkillRegistry();
     

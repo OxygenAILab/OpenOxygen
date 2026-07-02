@@ -1,10 +1,5 @@
-/**
- * 任务规划器
- * 
- * 将任务分析转换为可执行步骤
- */
-
 import { v4 as uuidv4 } from 'uuid';
+import { runInference, type ChatMessage } from '../engine';
 
 export interface PlanParams {
   taskId: string;
@@ -75,19 +70,6 @@ export interface ValidationRule {
   failureAction: 'retry' | 'rollback' | 'skip' | 'abort';
 }
 
-export interface StepResult {
-  stepId: string;
-  type: string;
-  success: boolean;
-  output: any;
-  screenshot?: string;
-  durationMs: number;
-  error?: string;
-}
-
-/**
- * 任务规划器
- */
 export class TaskPlanner {
   private llmGateway: any;
 
@@ -95,9 +77,6 @@ export class TaskPlanner {
     this.llmGateway = llmGateway;
   }
 
-  /**
-   * 创建执行计划
-   */
   async createPlan(params: PlanParams): Promise<TaskPlan> {
     const systemPrompt = `You are a task planner for a Computer Use Agent.
 Convert the task analysis into a detailed execution plan.
@@ -127,88 +106,55 @@ Rules:
 6. Define dependencies clearly
 7. Plan rollback steps for critical operations
 
-IMPORTANT: Respond ONLY with valid JSON. Do not include any preamble, explanation, or markdown formatting.
-JSON schema: {"steps": [{"id": string, "type": string, "description": string, "params": object, "dependencies": string[]}]}`;
+Respond in JSON format matching the TaskPlan interface.`;
 
-    const prompt = `Create execution plan for:
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Create execution plan for:
 Description: ${params.description}
 Mode: ${params.mode}
 Analysis: ${JSON.stringify(params.analysis)}
 Context: ${JSON.stringify(params.context)}
 
-Generate plan with steps that can be executed by the system.`;
+Generate plan with steps that can be executed by the system.` }
+    ];
 
-    const response = await this.llmGateway.complete({
-      system: systemPrompt,
-      prompt,
-      format: 'json',
+    const response = await runInference({
+      messages,
+      model: { model: 'gpt-4', provider: 'openai' },
+      maxTokens: 4000
     });
 
-    let planData: any;
-    try {
-      planData = JSON.parse(response.content);
-    } catch {
-      planData = {
-        steps: [{
-          id: 'step_1',
-          type: 'llm_decide',
-          description: `Analyze and execute: ${params.description}`,
-          params: { prompt: params.description },
-          dependencies: [],
-        }],
-      };
-    }
-
-    const steps = planData.steps || [{
-      id: 'step_1',
-      type: 'llm_decide',
-      description: `Analyze and execute: ${params.description}`,
-      params: { prompt: params.description },
-      dependencies: [],
-    }];
+    const planData = JSON.parse(response.content);
     
     return {
       taskId: params.taskId,
       version: '2.0',
       description: params.description,
-      steps: this.validateAndEnrichSteps(steps),
-      dependencies: this.buildDependencyMap(steps),
+      steps: this.validateAndEnrichSteps(planData.steps),
+      dependencies: this.buildDependencyMap(planData.steps),
       rollbackSteps: planData.rollbackSteps,
     };
   }
 
-  /**
-   * 验证和丰富步骤
-   */
   private validateAndEnrichSteps(steps: any[]): PlanStep[] {
-    if (!steps || !Array.isArray(steps)) {
-      return [];
-    }
-    
-    return steps.map((step, index) => {
-      const stepType = step?.type || 'llm_decide';
-      
-      return {
-        id: step?.id || `step_${index}_${uuidv4().slice(0, 8)}`,
-        type: stepType as StepType,
-        description: step?.description || `${stepType} operation`,
-        params: step?.params || {},
-        dependencies: step?.dependencies || [],
-        retryConfig: {
-          maxRetries: step?.retryConfig?.maxRetries ?? 3,
-          backoffMs: step?.retryConfig?.backoffMs ?? 1000,
-          onRetry: step?.retryConfig?.onRetry,
-        },
-        timeoutMs: step?.timeoutMs ?? this.getDefaultTimeout(stepType),
-        captureScreenshot: step?.captureScreenshot ?? true,
-        validation: step?.validation || [],
-      };
-    });
+    return steps.map((step, index) => ({
+      id: step.id || `step_${index}_${uuidv4().slice(0, 8)}`,
+      type: step.type as StepType,
+      description: step.description || `${step.type} operation`,
+      params: step.params || {},
+      dependencies: step.dependencies || [],
+      retryConfig: {
+        maxRetries: step.retryConfig?.maxRetries ?? 3,
+        backoffMs: step.retryConfig?.backoffMs ?? 1000,
+        onRetry: step.retryConfig?.onRetry,
+      },
+      timeoutMs: step.timeoutMs ?? this.getDefaultTimeout(step.type),
+      captureScreenshot: step.captureScreenshot ?? true,
+      validation: step.validation || [],
+    }));
   }
 
-  /**
-   * 获取默认超时时间
-   */
   private getDefaultTimeout(stepType: string): number {
     if (stepType.startsWith('gui_')) return 30000;
     if (stepType.startsWith('cli_')) return 60000;
@@ -217,25 +163,14 @@ Generate plan with steps that can be executed by the system.`;
     return 30000;
   }
 
-  /**
-   * 构建依赖图
-   */
-  private buildDependencyMap(steps: any[]): Map<string, string[]> {
+  private buildDependencyMap(steps: PlanStep[]): Map<string, string[]> {
     const map = new Map<string, string[]>();
-    if (!steps || !Array.isArray(steps)) {
-      return map;
-    }
     for (const step of steps) {
-      if (step && step.id) {
-        map.set(step.id, step.dependencies || []);
-      }
+      map.set(step.id, step.dependencies);
     }
     return map;
   }
 
-  /**
-   * 优化计划
-   */
   async optimizePlan(plan: TaskPlan): Promise<TaskPlan> {
     const mergedSteps = this.mergeShortSteps(plan.steps);
 
@@ -245,16 +180,37 @@ Generate plan with steps that can be executed by the system.`;
     };
   }
 
-  /**
-   * 合并短步骤
-   */
+  private identifyParallelGroups(plan: TaskPlan): string[][] {
+    const groups: string[][] = [];
+    const executed = new Set<string>();
+    
+    while (executed.size < plan.steps.length) {
+      const group: string[] = [];
+      
+      for (const step of plan.steps) {
+        if (executed.has(step.id)) continue;
+        
+        const depsReady = step.dependencies.every(dep => executed.has(dep));
+        if (depsReady) {
+          group.push(step.id);
+        }
+      }
+      
+      if (group.length > 0) {
+        groups.push(group);
+        group.forEach(id => executed.add(id));
+      }
+    }
+    
+    return groups;
+  }
+
   private mergeShortSteps(steps: PlanStep[]): PlanStep[] {
-    // 连续的 GUI 操作可以合并
     const merged: PlanStep[] = [];
     let currentBatch: PlanStep[] = [];
 
     for (const step of steps) {
-      if (this.isGUiAction(step) && currentBatch.length < 5) {
+      if (this.isGuiAction(step) && currentBatch.length < 5) {
         currentBatch.push(step);
       } else {
         if (currentBatch.length > 1) {
@@ -267,7 +223,6 @@ Generate plan with steps that can be executed by the system.`;
       }
     }
 
-    // 处理剩余的批次
     if (currentBatch.length > 1) {
       merged.push(this.createBatchStep(currentBatch));
     } else if (currentBatch.length === 1) {
@@ -277,16 +232,10 @@ Generate plan with steps that can be executed by the system.`;
     return merged;
   }
 
-  /**
-   * 判断是否为 GUI 操作
-   */
-  private isGUiAction(step: PlanStep): boolean {
+  private isGuiAction(step: PlanStep): boolean {
     return ['gui_click', 'gui_type', 'gui_scroll'].includes(step.type);
   }
 
-  /**
-   * 创建批量步骤
-   */
   private createBatchStep(steps: PlanStep[]): PlanStep {
     return {
       id: `batch_${uuidv4().slice(0, 8)}`,
@@ -300,3 +249,5 @@ Generate plan with steps that can be executed by the system.`;
     };
   }
 }
+
+export default TaskPlanner;

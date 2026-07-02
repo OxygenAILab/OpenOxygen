@@ -1,15 +1,16 @@
-//! 任务调度器
+//! Task Scheduler
 //! 
-//! 负责任务的队列管理、优先级调度和执行协调
+//! Responsible for task queue management, priority scheduling, and execution coordination
+//! GitHub@StarsailsClover
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use serde::{Deserialize, Serialize};
+use chrono;
 
 use crate::error::CoreError;
 
-/// 任务定义
+/// Task definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
@@ -21,7 +22,7 @@ pub struct Task {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// 任务优先级
+/// Task priority
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum TaskPriority {
     Critical = 0,
@@ -30,7 +31,7 @@ pub enum TaskPriority {
     Low = 3,
 }
 
-/// 任务步骤
+/// Task step
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskStep {
     pub id: String,
@@ -39,7 +40,7 @@ pub struct TaskStep {
     pub depends_on: Vec<String>,
 }
 
-/// 步骤类型
+/// Step type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum StepType {
@@ -57,15 +58,15 @@ pub enum StepType {
     Condition { check: String },
 }
 
-/// GUI 动作
+/// GUI action
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuiAction {
-    pub action_type: String, // click, type, scroll, etc.
+    pub action_type: String,
     pub target: GuiTarget,
     pub params: serde_json::Value,
 }
 
-/// GUI 目标
+/// GUI target
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "target_type")]
 pub enum GuiTarget {
@@ -79,14 +80,14 @@ pub enum GuiTarget {
     ImageMatch { template: String, confidence: f32 },
 }
 
-/// 浏览器动作
+/// Browser action
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserAction {
     pub action_type: String,
     pub params: serde_json::Value,
 }
 
-/// 任务状态
+/// Task status
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskStatus {
     Pending,
@@ -98,15 +99,15 @@ pub enum TaskStatus {
     Cancelled,
 }
 
-/// 任务调度器
+/// Task scheduler
 pub struct TaskScheduler {
-    /// 任务队列
+    /// Task queue
     queue: VecDeque<Task>,
-    /// 任务状态映射
+    /// Task status mapping
     status_map: HashMap<String, TaskStatus>,
-    /// 执行通道发送端
+    /// Execution channel sender
     exec_tx: Option<mpsc::Sender<Task>>,
-    /// 是否运行中
+    /// Is running flag
     running: bool,
 }
 
@@ -120,11 +121,10 @@ impl TaskScheduler {
         }
     }
 
-    /// 提交任务
+    /// Submit task
     pub async fn submit(&mut self, task: Task) -> Result<(), CoreError> {
         self.status_map.insert(task.id.clone(), TaskStatus::Queued);
         
-        // 根据优先级插入队列
         let pos = self.queue.iter()
             .position(|t| t.priority > task.priority)
             .unwrap_or(self.queue.len());
@@ -133,11 +133,10 @@ impl TaskScheduler {
         Ok(())
     }
 
-    /// 启动调度器
+    /// Start scheduler
     pub async fn start(&mut self) {
         self.running = true;
         
-        // 调度循环
         while self.running {
             if let Some(task) = self.queue.pop_front() {
                 self.status_map.insert(
@@ -148,19 +147,19 @@ impl TaskScheduler {
                     }
                 );
                 
-                // TODO: 发送给执行器
+                // TODO: Send to executor
             }
             
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
     }
 
-    /// 获取任务状态
+    /// Get task status
     pub async fn get_status(&self, task_id: &str) -> Option<TaskStatus> {
         self.status_map.get(task_id).cloned()
     }
 
-    /// 取消任务
+    /// Cancel task
     pub async fn cancel(&mut self, task_id: &str) -> Result<(), CoreError> {
         if let Some(status) = self.status_map.get_mut(task_id) {
             *status = TaskStatus::Cancelled;

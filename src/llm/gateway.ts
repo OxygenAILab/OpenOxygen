@@ -7,7 +7,7 @@
 import { EventEmitter } from 'events';
 
 export interface LLMConfig {
-  provider: 'openai' | 'anthropic' | 'local' | 'custom';
+  provider: 'openai' | 'anthropic' | 'ollama' | 'gemini' | 'local' | 'custom';
   apiKey: string;
   baseUrl?: string;
   model: string;
@@ -197,6 +197,10 @@ export class LLMGateway extends EventEmitter {
         return this.callOpenAI(params);
       case 'anthropic':
         return this.callAnthropic(params);
+      case 'ollama':
+        return this.callOllama(params);
+      case 'gemini':
+        return this.callGemini(params);
       case 'local':
         return this.callLocal(params);
       default:
@@ -231,7 +235,7 @@ export class LLMGateway extends EventEmitter {
       throw new Error(`OpenAI API error: ${error}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const choice = data.choices[0];
 
     return {
@@ -279,7 +283,7 @@ export class LLMGateway extends EventEmitter {
       throw new Error(`Anthropic API error: ${error}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     
     return {
       content: data.content.find((c: any) => c.type === 'text')?.text || '',
@@ -304,7 +308,6 @@ export class LLMGateway extends EventEmitter {
    * 调用本地模型
    */
   private async callLocal(params: any): Promise<CompletionResponse> {
-    // 连接到本地模型服务（如 Ollama、LM Studio）
     const url = `${this.config.baseUrl || 'http://localhost:11434'}/api/chat`;
     
     const response = await fetch(url, {
@@ -324,7 +327,7 @@ export class LLMGateway extends EventEmitter {
       throw new Error(`Local API error: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     
     return {
       content: data.message?.content || '',
@@ -339,24 +342,132 @@ export class LLMGateway extends EventEmitter {
   }
 
   /**
-   * 流式调用
+   * 调用 Ollama API
    */
-  private async *callProviderStream(params: any): AsyncGenerator<string> {
-    const url = `${this.config.baseUrl || 'https://api.openai.com/v1'}/chat/completions`;
+  private async callOllama(params: any): Promise<CompletionResponse> {
+    const url = `${this.config.baseUrl || 'http://localhost:11434'}/api/chat`;
     
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.config.model,
+        messages: params.messages,
+        stream: false,
+        options: {
+          temperature: params.temperature,
+          num_ctx: params.maxTokens || 2000,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json() as any;
+    
+    return {
+      content: data.message?.content || '',
+      toolCalls: data.message?.tool_calls?.map((call: any) => ({
+        id: call.id,
+        name: call.function.name,
+        arguments: typeof call.function.arguments === 'string' 
+          ? JSON.parse(call.function.arguments) 
+          : call.function.arguments,
+      })),
+      usage: {
+        promptTokens: data.prompt_eval_count || 0,
+        completionTokens: data.eval_count || 0,
+        totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+      },
+      model: data.model || this.config.model,
+      finishReason: data.done ? 'stop' : 'length',
+    };
+  }
+
+  /**
+   * 调用 Gemini API
+   */
+  private async callGemini(params: any): Promise<CompletionResponse> {
+    const url = `${this.config.baseUrl || 'https://generativelanguage.googleapis.com/v1beta'}/models/${this.config.model}:generateContent`;
+    
+    const parts = params.messages.map((msg: ChatMessage) => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }],
+    }));
+
+    const response = await fetch(`${url}?key=${this.config.apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: parts,
+        generationConfig: {
+          temperature: params.temperature,
+          maxOutputTokens: params.maxTokens,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error: ${errorText}`);
+    }
+
+    const data = await response.json() as any;
+    
+    return {
+      content: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+      usage: {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+      },
+      model: this.config.model,
+      finishReason: data.candidates?.[0]?.finishReason || 'stop',
+    };
+  }
+
+  /**
+   * 流式调用
+   */
+  private async *callProviderStream(params: any): AsyncGenerator<string> {
+    let url: string;
+    let headers: Record<string, string>;
+    let body: any;
+
+    if (this.config.provider === 'ollama') {
+      url = `${this.config.baseUrl || 'http://localhost:11434'}/api/generate`;
+      headers = { 'Content-Type': 'application/json' };
+      body = {
+        model: this.config.model,
+        prompt: params.messages?.[params.messages.length - 1]?.content || '',
+        stream: true,
+        options: {
+          temperature: params.temperature,
+          num_ctx: params.maxTokens || 2000,
+        },
+      };
+    } else {
+      url = `${this.config.baseUrl || 'https://api.openai.com/v1'}/chat/completions`;
+      headers = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify({
+      };
+      body = {
         model: this.config.model,
         messages: params.messages,
         temperature: params.temperature,
         max_tokens: params.maxTokens,
         stream: true,
-      }),
+      };
+    }
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -378,17 +489,28 @@ export class LLMGateway extends EventEmitter {
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        
+        let data = trimmed;
+        if (this.config.provider !== 'ollama' && trimmed.startsWith('data: ')) {
+          data = trimmed.slice(6);
           if (data === '[DONE]') continue;
+        }
+        
+        try {
+          const parsed = JSON.parse(data);
+          let content: string | undefined;
           
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) yield content;
-          } catch {
-            // Ignore parse errors
+          if (this.config.provider === 'ollama') {
+            content = parsed.response;
+          } else {
+            content = parsed.choices?.[0]?.delta?.content;
           }
+          
+          if (content) yield content;
+        } catch {
+          // Ignore parse errors
         }
       }
     }

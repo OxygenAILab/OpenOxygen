@@ -18,7 +18,7 @@ uuid = { workspace = true }
 image = { workspace = true }
 
 # OCR support
-tesseract = "0.16"
+tesseract = "0.15"
 
 [dev-dependencies]
 tokio-test = "0.4"

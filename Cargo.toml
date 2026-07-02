@@ -9,12 +9,12 @@ members = [
     "crates/memory",
     "crates/ouv",
     "crates/htn-planner",
+    "crates/ollama",
 ]
 exclude = ["target"]
 resolver = "2"
 
 [workspace.package]
-name = "openoxygen-next"
 version = "1.0.0"
 edition = "2021"
 authors = ["OpenOxygen Team"]

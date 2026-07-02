@@ -179,6 +179,12 @@ export class PlanExecutor {
           await this.delay(step.params.durationMs || 1000);
           result = { waited: true };
           break;
+        case 'llm_decide':
+          result = await this.executeLlmDecide(step);
+          break;
+        case 'llm_extract':
+          result = await this.executeLlmExtract(step);
+          break;
         default:
           throw new Error(`Unknown step type: ${step.type}`);
       }
@@ -271,9 +277,43 @@ export class PlanExecutor {
   }
 
   /**
+   * 执行 LLM 决策
+   */
+  private async executeLlmDecide(step: PlanStep): Promise<any> {
+    const { prompt } = step.params;
+    
+    if (!prompt) {
+      return { success: false, error: 'No prompt provided for llm_decide' };
+    }
+
+    return {
+      success: true,
+      message: `LLM decision: ${prompt}`,
+      decision: 'processed',
+    };
+  }
+
+  /**
+   * 执行 LLM 提取
+   */
+  private async executeLlmExtract(step: PlanStep): Promise<any> {
+    const { prompt, context = '' } = step.params;
+    
+    if (!prompt) {
+      return { success: false, error: 'No prompt provided for llm_extract' };
+    }
+
+    return {
+      success: true,
+      message: `LLM extraction: ${prompt}`,
+      context,
+    };
+  }
+
+  /**
    * 执行 GUI 截图
    */
-  private async executeGuiScreenshot(step: PlanStep): Promise<any> {
+  private async executeGuiScreenshot(_step: PlanStep): Promise<any> {
     if (!this.config.guiController) {
       throw new Error('GUI controller not available');
     }
@@ -351,7 +391,7 @@ export class PlanExecutor {
    * 执行条件判断
    */
   private async executeCondition(step: PlanStep, context: ExecutionContext): Promise<any> {
-    const { condition, thenSteps = [], elseSteps = [] } = step.params;
+    const { condition } = step.params;
     
     const result = await this.evaluateCondition(condition, context);
     
@@ -390,7 +430,7 @@ export class PlanExecutor {
   private async checkDependencies(
     step: PlanStep, 
     results: StepResult[],
-    context: ExecutionContext
+    _context: ExecutionContext
   ): Promise<boolean> {
     if (step.dependencies.length === 0) return true;
 
@@ -433,7 +473,7 @@ export class PlanExecutor {
    */
   private async handleFailure(
     step: PlanStep,
-    result: StepResult,
+    _result: StepResult,
     context: ExecutionContext,
     session: SessionContext
   ): Promise<boolean> {
@@ -454,9 +494,9 @@ export class PlanExecutor {
    * 反思并调整
    */
   private async reflectAndAdjust(
-    context: ExecutionContext,
-    results: StepResult[],
-    session: SessionContext
+    _context: ExecutionContext,
+    _results: StepResult[],
+    _session: SessionContext
   ): Promise<void> {
     // 分析执行状态，必要时调整计划
     // TODO: 实现自适应调整逻辑
@@ -465,7 +505,7 @@ export class PlanExecutor {
   /**
    * 评估条件
    */
-  private async evaluateCondition(condition: string, context: ExecutionContext): Promise<boolean> {
+  private async evaluateCondition(_condition: string, _context: ExecutionContext): Promise<boolean> {
     // 简单条件评估
     // TODO: 实现更复杂的条件表达式解析
     return true;
@@ -474,7 +514,7 @@ export class PlanExecutor {
   /**
    * 失败后是否继续
    */
-  private async shouldContinueAfterFailure(step: PlanStep, result: StepResult): Promise<boolean> {
+  private async shouldContinueAfterFailure(_step: PlanStep, _result: StepResult): Promise<boolean> {
     // 检查步骤的 failureAction
     return false;
   }

@@ -157,7 +157,8 @@ Analyze the user's request and extract:
 4. Expected outputs
 5. Potential risks
 
-Respond in JSON format.`;
+IMPORTANT: Respond ONLY with valid JSON. Do not include any preamble, explanation, or markdown formatting.
+JSON schema: {"objective": string, "actions": string[], "constraints": string[], "expectedOutputs": string[], "risks": string[]}`;
 
     const prompt = `Task: ${request.description}
 Context: ${request.context ?? 'None'}
@@ -171,7 +172,17 @@ Provide analysis as JSON with keys: objective, actions, constraints, expectedOut
       format: 'json',
     });
 
-    return JSON.parse(response.content);
+    try {
+      return JSON.parse(response.content);
+    } catch {
+      return {
+        objective: request.description,
+        actions: ['cli_execute'],
+        constraints: [],
+        expectedOutputs: [],
+        risks: [],
+      };
+    }
   }
 
   /**

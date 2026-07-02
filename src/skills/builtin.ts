@@ -4,11 +4,11 @@
  * 核心自动化技能的具体实现
  */
 
-import { Skill, SkillContext, SkillResult, ParameterDefinition } from './registry';
-import { TaskRequest, TaskResponse } from '../orchestrator';
+import { SkillDefinition, ToolResult } from './registry';
+import { TaskRequest, TaskResponse } from '../orchestrator/mod';
 
 // GUI 技能
-export const guiSkills: Skill[] = [
+export const guiSkills: SkillDefinition[] = [
   {
     name: 'gui_click',
     description: '点击屏幕上的指定坐标或元素',
@@ -191,7 +191,7 @@ export const guiSkills: Skill[] = [
 ];
 
 // CLI 技能
-export const cliSkills: Skill[] = [
+export const cliSkills: SkillDefinition[] = [
   {
     name: 'cli_execute',
     description: '执行命令行命令',
@@ -274,7 +274,7 @@ export const cliSkills: Skill[] = [
 ];
 
 // 浏览器技能
-export const browserSkills: Skill[] = [
+export const browserSkills: SkillDefinition[] = [
   {
     name: 'browser_navigate',
     description: '导航到 URL',
@@ -376,7 +376,7 @@ export const browserSkills: Skill[] = [
 ];
 
 // 系统技能
-export const systemSkills: Skill[] = [
+export const systemSkills: SkillDefinition[] = [
   {
     name: 'wait',
     description: '等待指定时间',
@@ -472,7 +472,7 @@ export const systemSkills: Skill[] = [
 ];
 
 // 导出所有内置技能
-export const allBuiltinSkills: Skill[] = [
+export const allBuiltinSkills: SkillDefinition[] = [
   ...guiSkills,
   ...cliSkills,
   ...browserSkills,
