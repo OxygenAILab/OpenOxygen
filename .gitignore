@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+target/
+coverage/
+*.tsbuildinfo
+
+# Local runtime data
+output/
+memory_store/
+memory_store_example/
+playwright-report/
+test-results/
+
+# Logs and diagnostics
+*.log
+*_errors.txt
+check_out.txt
+all_errors.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Screenshots and generated media
+screenshot.png
+screenshots/
+*.webm
+*.mp4
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/

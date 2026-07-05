@@ -193,7 +193,7 @@ Generate plan with steps that can be executed by the system.`;
    */
   async optimizePlan(plan: TaskPlan): Promise<TaskPlan> {
     // 识别可以并行执行的步骤
-    const parallelGroups = this.identifyParallelGroups(plan);
+    const _parallelGroups = this.identifyParallelGroups(plan);
     
     // 合并短步骤
     const mergedSteps = this.mergeShortSteps(plan.steps);
@@ -207,7 +207,7 @@ Generate plan with steps that can be executed by the system.`;
   /**
    * 识别可并行步骤组
    */
-  private identifyifyParallelGroups(plan: TaskPlan): string[][] {
+  private identifyParallelGroups(plan: TaskPlan): string[][] {
     const groups: string[][] = [];
     const executed = new Set<string>();
     

@@ -17,6 +17,9 @@ export interface OrchestratorConfig {
   llmGateway: LLMGateway;
   guiController?: any; // Rust binding
   cliExecutor?: any; // Rust binding
+  browserController?: any; // Playwright controller
+  fileSystemManager?: any; // FileSystem manager
+  memoryEngine?: any; // Memory engine
   maxRetries?: number;
   enableReflection?: boolean;
 }
@@ -62,6 +65,9 @@ export class TaskOrchestrator {
     this.executor = new PlanExecutor({
       guiController: config.guiController,
       cliExecutor: config.cliExecutor,
+      browserController: config.browserController,
+      fileSystemManager: config.fileSystemManager,
+      memoryEngine: config.memoryEngine,
       maxRetries: config.maxRetries ?? 3,
       enableReflection: config.enableReflection ?? true,
     });

@@ -9,9 +9,10 @@ use tokio::sync::{mpsc, RwLock};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub mod discovery;
-pub mod messaging;
-pub mod coordination;
+// 内联 stub 模块定义在文件底部
+// pub mod discovery;
+// pub mod messaging;
+// pub mod coordination;
 
 /// Agent 实例
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -223,7 +224,7 @@ impl AgentBridge {
         
         Ok(Self {
             self_id: self_agent.id.clone(),
-            agents: Arc::new(RwLock::new(HashMap::from([(self_agent.id.clone(), self_agent)])),
+            agents: Arc::new(RwLock::new(HashMap::from([(self_agent.id.clone(), self_agent)]))),
             message_tx,
             message_rx: Arc::new(RwLock::new(message_rx)),
             subscribers: Arc::new(RwLock::new(HashMap::new())),
@@ -308,6 +309,7 @@ impl AgentBridge {
 
     /// 注册 Agent
     pub async fn register_agent(&self, agent: Agent) -> Result<(), AgentBridgeError> {
+        let agent_id = agent.id.clone();
         self.agents.write().await.insert(agent.id.clone(), agent);
         
         // 广播新 Agent 注册
@@ -315,7 +317,7 @@ impl AgentBridge {
             self.self_id.clone(),
             MessageType::Event {
                 event_type: "agent_registered".to_string(),
-                data: serde_json::json!({"agent_id": agent.id}),
+                data: serde_json::json!({"agent_id": agent_id}),
             },
             MessagePriority::Normal,
         ).await.ok();

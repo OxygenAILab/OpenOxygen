@@ -5,9 +5,7 @@
 use image::DynamicImage;
 use serde::{Deserialize, Serialize};
 
-pub mod ocr;
-pub mod vision;
-pub mod element;
+// 内联 stub 模块定义在文件底部（ocr, vision, element）
 
 /// 感知处理器
 pub struct PerceptionEngine {

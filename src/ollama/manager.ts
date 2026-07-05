@@ -39,7 +39,7 @@ export class OllamaManager extends EventEmitter {
   /** 获取本地模型列表 */
   async listModels(): Promise<OllamaModel[]> {
     const response = await fetch(`${this.config.baseUrl}/api/tags`);
-    const data = await response.json();
+    const data = await response.json() as any;
     const models: OllamaModel[] = data.models.map((m: any) => ({
       name: m.name,
       size: m.size,
@@ -97,7 +97,7 @@ export class OllamaManager extends EventEmitter {
       }),
     });
     
-    return await response.json();
+    return await response.json() as { response: string; total_duration: number };
   }
 
   /** 推断模型能力 */

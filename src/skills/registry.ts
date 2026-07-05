@@ -26,11 +26,12 @@ export type SkillCategory =
   | 'file' 
   | 'network'
   | 'data'
+  | 'memory'
   | 'custom';
 
 export interface ParameterDefinition {
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'enum';
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'enum' | 'any';
   description: string;
   required: boolean;
   default?: any;
@@ -55,6 +56,7 @@ export interface SkillContext {
   workingDirectory: string;
   guiController?: any;
   cliExecutor?: any;
+  browserController?: any;
   memory: Map<string, any>;
   getScreenshot: () => Promise<string>;
   sendMessage: (type: string, data: any) => void;

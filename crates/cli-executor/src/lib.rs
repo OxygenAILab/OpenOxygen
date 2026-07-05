@@ -252,7 +252,10 @@ impl CliExecutor {
     pub async fn spawn(&self, request: ExecutionRequest) -> Result<String, CliError> {
         let cwd = request.cwd.as_deref()
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| self.working_dir.read().await.clone());
+            .unwrap_or_else(|| {
+                // 使用同步方式获取当前工作目录
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+            });
 
         let mut cmd = if cfg!(target_os = "windows") {
             let mut cmd = Command::new("cmd");

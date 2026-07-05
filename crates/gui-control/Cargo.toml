@@ -7,7 +7,6 @@ license.workspace = true
 
 [dependencies]
 openoxygen-core = { path = "../core" }
-openoxygen-ouv = { path = "../ouv" }
 
 tokio = { workspace = true }
 serde = { workspace = true }
@@ -17,6 +16,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 image = { workspace = true }
 uuid = { workspace = true }
+base64 = { workspace = true }
 
 [dependencies.windows]
 version = "0.58"

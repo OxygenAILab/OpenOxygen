@@ -1,5 +1,5 @@
 [package]
-name = "openoxygen-ouv"
+name = "openoxygen-perception"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,8 +7,6 @@ license.workspace = true
 
 [dependencies]
 openoxygen-core = { path = "../core" }
-openoxygen-memory = { path = "../memory" }
-openoxygen-vlm-connector = { path = "../vlm-connector" }
 
 tokio = { workspace = true }
 serde = { workspace = true }

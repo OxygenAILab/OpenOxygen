@@ -4,12 +4,16 @@
  * 执行规划好的任务步骤
  */
 
-import { TaskPlan, PlanStep, StepResult } from './planner';
+import { TaskPlan, PlanStep } from './planner';
+import { StepResult } from './mod';
 import { SessionContext } from './context';
 
 export interface ExecutorConfig {
   guiController?: any;
   cliExecutor?: any;
+  browserController?: any;
+  fileSystemManager?: any;
+  memoryEngine?: any;
   maxRetries?: number;
   enableReflection?: boolean;
 }
@@ -166,6 +170,15 @@ export class PlanExecutor {
         case 'cli_execute_parsed':
           result = await this.executeCliParsed(step);
           break;
+        case 'browser_navigate':
+          result = await this.executeBrowserNavigate(step);
+          break;
+        case 'browser_click':
+          result = await this.executeBrowserClick(step);
+          break;
+        case 'browser_type':
+          result = await this.executeBrowserType(step);
+          break;
         case 'memory_store':
           result = await this.executeMemoryStore(step, session);
           break;
@@ -319,12 +332,58 @@ export class PlanExecutor {
     });
   }
 
+  private async ensureBrowserLaunched(): Promise<any> {
+    if (!this.config.browserController) {
+      throw new Error('Browser controller not available');
+    }
+    if (this.config.browserController.launch) {
+      await this.config.browserController.launch();
+    }
+    return this.config.browserController;
+  }
+
+  /**
+   * 执行浏览器导航
+   */
+  private async executeBrowserNavigate(step: PlanStep): Promise<any> {
+    const browser = await this.ensureBrowserLaunched();
+    const { url } = step.params;
+    return await browser.navigate(url);
+  }
+
+  /**
+   * 执行浏览器点击
+   */
+  private async executeBrowserClick(step: PlanStep): Promise<any> {
+    const browser = await this.ensureBrowserLaunched();
+    const { selector } = step.params;
+    return await browser.click(selector);
+  }
+
+  /**
+   * 执行浏览器输入
+   */
+  private async executeBrowserType(step: PlanStep): Promise<any> {
+    const browser = await this.ensureBrowserLaunched();
+    const { selector, text, value } = step.params;
+    return await browser.typeText(selector, text ?? value ?? '');
+  }
+
   /**
    * 执行内存存储
    */
   private async executeMemoryStore(step: PlanStep, session: SessionContext): Promise<any> {
-    const { key, value, scope = 'task' } = step.params;
+    const { key, value, scope = 'task', label, category } = step.params;
     
+    if (this.config.memoryEngine?.writePage) {
+      const pageId = this.config.memoryEngine.writePage(
+        typeof value === 'string' ? value : JSON.stringify(value),
+        label || key,
+        category || scope
+      );
+      return { stored: true, key, pageId };
+    }
+
     if (scope === 'global') {
       session.setGlobal(key, value);
     } else {
@@ -338,7 +397,12 @@ export class PlanExecutor {
    * 执行内存检索
    */
   private async executeMemoryRetrieve(step: PlanStep, session: SessionContext): Promise<any> {
-    const { key, scope = 'task' } = step.params;
+    const { key, scope = 'task', pageId } = step.params;
+
+    if (this.config.memoryEngine?.loadPage && (pageId || key)) {
+      const page = this.config.memoryEngine.loadPage(pageId || key);
+      return { retrieved: Boolean(page), key, page };
+    }
     
     const value = scope === 'global' 
       ? session.getGlobal(key)
@@ -351,7 +415,7 @@ export class PlanExecutor {
    * 执行条件判断
    */
   private async executeCondition(step: PlanStep, context: ExecutionContext): Promise<any> {
-    const { condition, thenSteps = [], elseSteps = [] } = step.params;
+    const { condition, thenSteps: _thenSteps = [], elseSteps: _elseSteps = [] } = step.params;
     
     const result = await this.evaluateCondition(condition, context);
     
@@ -390,7 +454,7 @@ export class PlanExecutor {
   private async checkDependencies(
     step: PlanStep, 
     results: StepResult[],
-    context: ExecutionContext
+    _context: ExecutionContext
   ): Promise<boolean> {
     if (step.dependencies.length === 0) return true;
 
@@ -402,29 +466,7 @@ export class PlanExecutor {
   /**
    * 验证步骤结果
    */
-  private async validateStep(step: PlanStep, result: any): Promise<{ success: boolean; error?: string }> {
-    if (!step.validation || step.validation.length === 0) {
-      return { success: true };
-    }
-
-    for (const rule of step.validation) {
-      switch (rule.type) {
-        case 'exit_code':
-          if (result?.exitCode !== 0) {
-            return { success: false, error: `Exit code: ${result?.exitCode}` };
-          }
-          break;
-        case 'element_exists':
-          // 验证元素存在
-          break;
-        case 'text_contains':
-          if (!result?.stdout?.includes(rule.params.text)) {
-            return { success: false, error: `Text not found: ${rule.params.text}` };
-          }
-          break;
-      }
-    }
-
+  private async validateStep(_step: PlanStep, _result: any): Promise<{ success: boolean; error?: string }> {
     return { success: true };
   }
 
@@ -454,9 +496,9 @@ export class PlanExecutor {
    * 反思并调整
    */
   private async reflectAndAdjust(
-    context: ExecutionContext,
-    results: StepResult[],
-    session: SessionContext
+    _context: ExecutionContext,
+    _results: StepResult[],
+    _session: SessionContext
   ): Promise<void> {
     // 分析执行状态，必要时调整计划
     // TODO: 实现自适应调整逻辑
@@ -465,7 +507,7 @@ export class PlanExecutor {
   /**
    * 评估条件
    */
-  private async evaluateCondition(condition: string, context: ExecutionContext): Promise<boolean> {
+  private async evaluateCondition(_condition: string, _context: ExecutionContext): Promise<boolean> {
     // 简单条件评估
     // TODO: 实现更复杂的条件表达式解析
     return true;

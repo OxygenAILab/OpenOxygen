@@ -8,9 +8,7 @@ use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-pub mod domain;
-pub mod decomposer;
-pub mod resolver;
+// 内联 stub 模块定义在文件底部（domain, decomposer, resolver）
 
 /// HTN 规划器
 #[derive(Debug, Clone)]
@@ -54,7 +52,7 @@ impl Default for PlannerConfig {
 }
 
 /// 回溯策略
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BacktrackStrategy {
     /// 时序回溯
     Chronological,
@@ -382,7 +380,7 @@ pub struct TaskNode {
 }
 
 /// 任务状态（规划中）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Pending,
@@ -817,7 +815,7 @@ impl HtnPlanner {
                 if order > 0 && order <= subtask_ids.len() {
                     network.edges.push(TaskEdge {
                         from: subtask_ids[order - 1].clone(),
-                        to: subtask_id.clone(),
+                        to: subtask_ids.last().unwrap().clone(),
                         edge_type: EdgeType::Sequential,
                     });
                 }

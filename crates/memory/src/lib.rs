@@ -10,9 +10,10 @@ use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc, Duration};
 use uuid::Uuid;
 
-pub mod embeddings;
-pub mod vector_store;
-pub mod decay;
+// 内联 stub 模块定义在文件底部
+// pub mod embeddings;
+// pub mod vector_store;
+// pub mod decay;
 
 /// 记忆层级
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -541,16 +542,17 @@ pub mod vector_store {
     use super::*;
     use std::collections::HashMap;
     
+    #[derive(Debug, Clone)]
     pub struct VectorStore {
         dim: usize,
-        vectors: RwLock<HashMap<String, (Vec<f32>, MemoryTier)>>,
+        vectors: Arc<RwLock<HashMap<String, (Vec<f32>, MemoryTier)>>>,
     }
     
     impl VectorStore {
         pub async fn new(dim: usize) -> Result<Self, MemoryError> {
             Ok(Self {
                 dim,
-                vectors: RwLock::new(HashMap::new()),
+                vectors: Arc::new(RwLock::new(HashMap::new())),
             })
         }
         

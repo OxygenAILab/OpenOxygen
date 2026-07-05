@@ -10,9 +10,7 @@ use tokio::sync::RwLock;
 use image::{DynamicImage, Rgba, ImageBuffer};
 use serde::{Deserialize, Serialize};
 
-pub mod pixel_layer;
-pub mod feature_layer;
-pub mod semantic_layer;
+// 内联 stub 模块定义在文件底部（pixel_layer, feature_layer, semantic_layer）
 
 /// OUV 三层融合引擎
 pub struct OuvEngine {

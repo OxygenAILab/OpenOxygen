@@ -48,7 +48,7 @@ export class LLMRouter extends EventEmitter {
     // Ollama 本地模型
     try {
       const res = await fetch(`${this.config.ollamaUrl}/api/tags`);
-      const data = await res.json();
+      const data = await res.json() as any;
       
       for (const m of data.models) {
         this.availableModels.push({

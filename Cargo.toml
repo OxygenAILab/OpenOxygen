@@ -14,11 +14,11 @@ resolver = "2"
 
 [workspace.package]
 name = "openoxygen-next"
-version = "1.0.0"
+version = "26.0.0-alpha.1"
 edition = "2021"
 authors = ["OpenOxygen Team"]
 license = "MIT"
-repository = "https://github.com/StarsailsClover/OpenOxygen2.0"
+repository = "https://github.com/StarsailsClover/OpenOxygen"
 
 [workspace.dependencies]
 tokio = { version = "1.43", features = ["full", "sync", "time", "rt-multi-thread"] }
@@ -29,17 +29,12 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 thiserror = "2.0"
 tracing = "0.1"
 image = "0.25"
+base64 = "0.22"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+futures-util = "0.3"
 
-# Windows specific
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_UI_Input_KeyboardAndMouse",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_UI_Accessibility",
-    "Win32_System_Threading",
-] }
+# Windows only — 各 crate 自己声明依赖
+# windows crate 放在需要的 crate 里单独引入
 
 [profile.release]
 opt-level = 3
