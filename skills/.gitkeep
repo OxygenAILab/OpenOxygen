@@ -1,8 +1,0 @@
-# This directory holds OpenOxygen skill definitions.
-# Each subdirectory is one skill with a manifest.json and entry file.
-#
-# Example:
-#   skills/
-#     file-organizer/
-#       manifest.json
-#       index.ts

@@ -1,227 +1,199 @@
-# OpenOxygen Architecture
+# OpenOxygen 2.0 Architecture
 
 ## Overview
 
-OpenOxygen follows a **layered architecture** with clear separation of concerns:
-
-```
-┌─────────────────────────────────────────────────────────────�?
-�?                   Presentation Layer                        �?
-�? ┌─────────────�? ┌─────────────�? ┌─────────────────────�?�?
-�? �?  Desktop   �? �?   CLI      �? �?     Gateway        �?�?
-�? �? (Tauri)    �? �?            �? �? (HTTP/WebSocket)   �?�?
-�? └─────────────�? └─────────────�? └─────────────────────�?�?
-└─────────────────────────────────────────────────────────────�?
-                              �?
-┌─────────────────────────────────────────────────────────────�?
-�?                    Agent Layer                              �?
-�? ┌─────────────�? ┌─────────────�? ┌─────────────────────�?�?
-�? │Orchestrator �? │Communication�? �?  Task Manager      �?�?
-�? └─────────────�? └─────────────�? └─────────────────────�?�?
-└─────────────────────────────────────────────────────────────�?
-                              �?
-┌─────────────────────────────────────────────────────────────�?
-�?                  Planning Layer                             �?
-�? ┌─────────────�? ┌─────────────�? ┌─────────────────────�?�?
-�? �?HTN Planner �? �?  Router    �? �?Reflection Engine   �?�?
-�? └─────────────�? └─────────────�? └─────────────────────�?�?
-└─────────────────────────────────────────────────────────────�?
-                              �?
-┌─────────────────────────────────────────────────────────────�?
-�?                  Execution Layer                            �?
-�? ┌─────────────�? ┌─────────────�? ┌─────────────────────�?�?
-�? �?  Sandbox   �? �?  Browser   �? �?     Terminal       �?�?
-�? �?Worker Thr) �? �?   (CDP)    �? �?                    �?�?
-�? └─────────────�? └─────────────�? └─────────────────────�?�?
-└─────────────────────────────────────────────────────────────�?
-                              �?
-┌─────────────────────────────────────────────────────────────�?
-�?                  Inference Layer                            �?
-�? ┌─────────────�? ┌─────────────�? ┌─────────────────────�?�?
-�? �?  Engine    �? �?AI Cluster  �? �?  OLB (Rust)        �?�?
-�? �?            �? �?            �? �? (Flash Attention)  �?�?
-�? └─────────────�? └─────────────�? └─────────────────────�?�?
-└─────────────────────────────────────────────────────────────�?
-                              �?
-┌─────────────────────────────────────────────────────────────�?
-�?                   Data Layer                                �?
-�? ┌─────────────�? ┌─────────────�? ┌─────────────────────�?�?
-�? │Vector Store �? �?  Memory    �? �?   Security         �?�?
-�? �?            �? �? Lifecycle  �? �? (Permissions)      �?�?
-�? └─────────────�? └─────────────�? └─────────────────────�?�?
-└─────────────────────────────────────────────────────────────�?
-```
+OpenOxygen 2.0 is a next-generation Computer Use Agent framework that enables LLMs to control computers through natural language. It combines vision-based GUI automation, command-line execution, and intelligent task orchestration.
 
 ## Core Principles
 
-### 1. Modularity
-- Each layer is independent
-- Clear interfaces between layers
-- Easy to test and replace
+1. **Vision-First GUI Control**: Like UI-TARS, we use visual understanding to locate and interact with UI elements
+2. **Natural Language Orchestration**: Users describe goals, the system autonomously plans and executes
+3. **Dual-Mode Operation**: Seamless switching between CLI and GUI automation
+4. **Extensible Skill System**: Plugin architecture for custom automation capabilities
+5. **Security by Design**: Zero-trust permission model with audit logging
 
-### 2. Security First
-- Zero-trust permission system
-- Sandbox isolation
-- Audit logging
+## Architecture Layers
 
-### 3. Performance
-- Rust core for compute-intensive tasks
-- Async I/O throughout
-- Memory-efficient design
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    User Interface Layer                      │
+│              (CLI / API / WebSocket / SDK)                  │
+├─────────────────────────────────────────────────────────────┤
+│                   Task Orchestrator                         │
+│         (Natural Language → Task Graph → Execution)        │
+├─────────────────────────────────────────────────────────────┤
+│                      LLM Gateway                             │
+│      (Multi-model Support / Tool Calling / Vision)        │
+├─────────────────────────────────────────────────────────────┤
+│                   Execution Layer                            │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │   GUI Ctrl  │  │   CLI Ctrl  │  │   Browser Ctrl      │ │
+│  │(Vision-based│  │(Shell/Term  │  │(CDP/Playwright)     │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│                   Perception Layer                           │
+│    (Screen Capture / OCR / Element Detection / CV)          │
+├─────────────────────────────────────────────────────────────┤
+│                   Skill System                               │
+│    (Built-in Skills / Custom Skills / Skill Registry)       │
+├─────────────────────────────────────────────────────────────┤
+│                   State Management                           │
+│    (Session Context / Memory / Vector Store)                │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 4. Extensibility
-- Plugin system
-- Skill registry
-- Protocol adapters
+## Component Details
 
-## Layer Details
+### 1. Task Orchestrator
 
-### Presentation Layer
-- **Desktop**: Tauri-based GUI
-- **CLI**: Command-line interface
-- **Gateway**: HTTP/WebSocket API
+The orchestrator is the brain of the system, responsible for:
+- **Task Analysis**: Understanding user intent using LLM
+- **Plan Generation**: Creating executable step-by-step plans
+- **Execution Management**: Coordinating step execution with retry logic
+- **Adaptive Planning**: Adjusting plans based on intermediate results
 
-### Agent Layer
-- **Orchestrator**: Multi-agent coordination
-- **Communication**: Inter-agent messaging
-- **Task Manager**: Task lifecycle
+Key files:
+- `src/orchestrator/planner.ts` - Task planning logic
+- `src/orchestrator/executor.ts` - Plan execution engine
+- `src/orchestrator/context.ts` - Session state management
 
-### Planning Layer
-- **HTN Planner**: Hierarchical task decomposition
-- **Router**: Dynamic model selection
-- **Reflection**: Self-improvement
+### 2. LLM Gateway
 
-### Execution Layer
-- **Sandbox**: Secure code execution
-- **Browser**: Web automation
-- **Terminal**: Shell execution
+Unified interface for multiple LLM providers:
+- **Providers**: OpenAI, Anthropic, Local (Ollama, LM Studio)
+- **Features**: Tool calling, vision understanding, streaming
+- **Protocol**: OpenAI-compatible API
 
-### Inference Layer
-- **Engine**: LLM inference
-- **AI Cluster**: Multi-model fusion
-- **OLB**: Rust acceleration
+Key files:
+- `src/llm/gateway.ts` - Main gateway implementation
 
-### Data Layer
-- **Vector Store**: Semantic search
-- **Memory**: Short/Mid/Long term
-- **Security**: Permissions & audit
+### 3. Execution Layer
+
+#### GUI Controller (`crates/gui-control/`)
+Rust-based high-performance GUI automation:
+- Windows UIA (UI Automation) integration
+- Visual element detection and matching
+- Mouse/keyboard simulation
+- Screenshot capture and analysis
+
+Key modules:
+- `capture.rs` - Screen capture
+- `input.rs` - Input simulation
+- `uia.rs` - Windows UIA integration
+- `vision.rs` - Computer vision utilities
+
+#### CLI Executor (`crates/cli-executor/`)
+Command-line execution with structured output:
+- Shell command execution
+- Output parsing (JSON, YAML, CSV)
+- Process management
+- Working directory handling
+
+Key modules:
+- `lib.rs` - Main executor
+- `parser.rs` - Output parsing
+- `shell.rs` - Shell integration
+
+### 4. Perception Layer
+
+Computer vision and understanding:
+- **OCR**: Text recognition from screenshots
+- **Element Detection**: UI element identification
+- **Visual Matching**: Template matching for icons/buttons
+- **Scene Understanding**: LLM-based visual description
+
+Key files:
+- `crates/perception/src/lib.rs` - Main perception engine
+
+### 5. Skill System
+
+Extensible automation capabilities:
+- **System Skills**: wait, getSystemInfo
+- **GUI Skills**: click, type, scroll, screenshot
+- **CLI Skills**: execute, spawn, kill
+- **File Skills**: read, write, list
+- **Custom Skills**: User-defined automation
+
+Key files:
+- `src/skills/registry.ts` - Skill registration and management
 
 ## Data Flow
 
 ```
-User Request
-    �?
-Presentation Layer (validation)
-    �?
-Agent Layer (orchestration)
-    �?
-Planning Layer (decomposition)
-    �?
-Execution Layer (sandboxed)
-    �?
-Inference Layer (OLB optimized)
-    �?
-Data Layer (persistence)
-    �?
-Response
+User Input
+    ↓
+[Task Analysis] → LLM
+    ↓
+[Plan Generation] → Task Graph
+    ↓
+[Step Execution] → GUI/CLI/Browser
+    ↓
+[Result Validation] → Screenshot/Output
+    ↓
+[Adaptive Planning] → Adjust if needed
+    ↓
+[Task Completion]
 ```
+
+## Key Design Decisions
+
+### Rust + TypeScript Architecture
+- **Rust**: Performance-critical components (GUI control, screen capture)
+- **TypeScript**: Business logic, LLM integration, API layer
+
+### Vision-Based GUI Control
+Unlike traditional automation frameworks that rely on element IDs or selectors:
+- Locate elements by visual appearance
+- More resilient to UI changes
+- Works with any application
+- Inspired by UI-TARS and OSWorld
+
+### Natural Language Orchestration
+Instead of scripted automation:
+- Users describe goals in natural language
+- LLM breaks down into executable steps
+- System adapts to real-time feedback
+
+### Tool Calling Protocol
+Standardized skill invocation:
+- OpenAI-compatible tool schema
+- Automatic parameter validation
+- Structured error handling
+
+## Performance Considerations
+
+1. **Screenshot Optimization**: 
+   - Selective region capture
+   - Compression for LLM transmission
+   - Caching for repeated operations
+
+2. **LLM Usage**:
+   - Streaming for responsiveness
+   - Caching for common operations
+   - Vision model for complex scenes
+
+3. **Execution**:
+   - Parallel step execution when safe
+   - Retry with exponential backoff
+   - Timeout handling
 
 ## Security Model
 
-```
-┌─────────────────────────────────────�?
-�?        Permission Check            �?
-�?   (Zero-trust, every operation)    �?
-└─────────────────────────────────────�?
-                  �?
-┌─────────────────────────────────────�?
-�?        Sandbox Isolation           �?
-�?   (Worker Thread, no system access)�?
-└─────────────────────────────────────�?
-                  �?
-┌─────────────────────────────────────�?
-�?        Audit Logging               �?
-�?   (Every action recorded)          �?
-└─────────────────────────────────────�?
-```
+1. **Permission System**: Each skill requires explicit permission
+2. **Audit Logging**: All actions logged with screenshots
+3. **Sandbox**: Untrusted skills run in isolated environment
+4. **User Confirmation**: Critical operations require confirmation
 
-## Performance Optimizations
+## Future Extensions
 
-### OLB (OxygenLLMBooster)
-- Flash Attention V3
-- TurboKV Cache (3-bit)
-- Paged Memory
-- Universal MoE
+1. **Multi-Agent**: Coordinate multiple agents
+2. **Learning**: Remember successful patterns
+3. **Mobile**: iOS/Android automation
+4. **Cloud**: Distributed execution
 
-### Async Architecture
-- Non-blocking I/O
-- Worker pools
-- Connection pooling
+## References
 
-### Caching
-- Vector cache
-- Model cache
-- Result cache
-
-## Extension Points
-
-### Skills
-```typescript
-interface Skill {
-  id: string;
-  name: string;
-  handler: (params: any) => Promise<Result>;
-}
-```
-
-### Protocols
-```typescript
-interface ProtocolAdapter {
-  connect(config: Config): Promise<void>;
-  execute(command: Command): Promise<Result>;
-}
-```
-
-### Plugins
-```typescript
-interface Plugin {
-  name: string;
-  activate(): void;
-  deactivate(): void;
-}
-```
-
-## Deployment
-
-### Standalone
-```
-OpenOxygen Core
-├── Node.js Runtime
-├── OLB (Rust binary)
-└── Native modules
-```
-
-### Distributed
-```
-Gateway Server
-├── Load Balancer
-├── Multiple Workers
-└── Shared Storage
-```
-
-## Future Evolution
-
-### Phase 1: Core (Current)
-- Basic functionality
-- Single user
-- Local execution
-
-### Phase 2: Scale
-- Multi-user
-- Distributed
-- Cloud-native
-
-### Phase 3: Intelligence
-- Self-learning
-- Auto-optimization
-- Predictive
+- UI-TARS: ByteDance's vision-based GUI agent
+- OSWorld: Open-ended computer task benchmark
+- OpenClaw: Multi-agent framework
+- Hermes: Autonomous agent framework
