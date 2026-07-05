@@ -1,81 +1,63 @@
 {
-  "name": "openoxygen",
-  "version": "26w15a-dev-26.115.0",
-  "description": "Windows-native Agent deployment framework with OpenClaw ecosystem compatibility, kernel-level system control, and fused inference planning",
-  "keywords": [
-    "agent",
-    "ai",
-    "windows",
-    "openclaw-compatible",
-    "vision",
-    "inference"
-  ],
-  "homepage": "https://github.com/openoxygen/openoxygen#readme",
-  "license": "MIT",
-  "author": "",
-  "type": "module",
+  "name": "openoxygen-next",
+  "version": "26.0.0-alpha.1",
+  "description": "OpenOxygen Next - Vision-first Computer Use Agent with multi-agent orchestration",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "openoxygen": "openoxygen.mjs"
+    "openoxygen": "dist/index.js"
   },
-  "exports": {
-    ".": "./dist/index.js",
-    "./plugin-sdk": {
-      "types": "./dist/plugins/sdk/index.d.ts",
-      "default": "./dist/plugins/sdk/index.js"
-    },
-    "./compat/openclaw": {
-      "types": "./dist/compat/openclaw/index.d.ts",
-      "default": "./dist/compat/openclaw/index.js"
-    }
-  },
-  "files": [
-    "CHANGELOG.md",
-    "LICENSE",
-    "openoxygen.mjs",
-    "README.md",
-    "assets/",
-    "dist/",
-    "docs/",
-    "skills/"
-  ],
   "scripts": {
-    "build": "npm run build:native && tsc -p tsconfig.json",
-    "build:ts": "tsc -p tsconfig.json",
-    "build:native": "cd packages/core-native && napi build --platform --release",
-    "build:native:debug": "cd packages/core-native && napi build --platform",
-    "dev": "tsx watch src/entry.ts",
-    "start": "node dist/entry.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "oxlint ./src",
-    "lint:fix": "oxlint ./src --fix",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit"
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "build:rust": "cargo build --release",
+    "test": "jest",
+    "test:rust": "cargo test",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rimraf dist && cargo clean"
   },
+  "keywords": [
+    "ai",
+    "agent",
+    "automation",
+    "gui",
+    "cli",
+    "llm",
+    "computer-use",
+    "ui-tars",
+    "openclaw"
+  ],
+  "author": "OpenOxygen Team",
+  "license": "MIT",
   "dependencies": {
-    "@openoxygen/core-native": "file:./packages/core-native",
-    "better-sqlite3": "^11.10.0",
-    "chokidar": "^4.0.3",
-    "commander": "^13.1.0",
-    "dotenv": "^16.4.7",
-    "uuid": "^11.1.0",
-    "ws": "^8.18.0",
-    "zod": "^3.24.2"
+    "better-sqlite3": "^12.11.1",
+    "chalk": "^5.3.0",
+    "commander": "^11.0.0",
+    "playwright": "^1.61.1",
+    "uuid": "^9.0.0",
+    "ws": "^8.14.0",
+    "zod": "^3.22.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.13.0",
-    "@types/uuid": "^10.0.0",
-    "@types/ws": "^8.5.14",
-    "prettier": "^3.5.3",
-    "rimraf": "^6.0.1",
-    "tsx": "^4.19.3",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "@types/ws": "^8.5.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.50.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.0.0",
+    "rimraf": "^5.0.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.2.0"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=18.0.0"
   }
 }

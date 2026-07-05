@@ -1,0 +1,44 @@
+[workspace]
+members = [
+    "crates/core",
+    "crates/gui-control",
+    "crates/cli-executor",
+    "crates/perception",
+    "crates/agent-bridge",
+    "crates/vlm-connector",
+    "crates/memory",
+    "crates/ouv",
+    "crates/htn-planner",
+]
+resolver = "2"
+
+[workspace.package]
+name = "openoxygen-next"
+version = "26.0.0-alpha.1"
+edition = "2021"
+authors = ["OpenOxygen Team"]
+license = "MIT"
+repository = "https://github.com/StarsailsClover/OpenOxygen"
+
+[workspace.dependencies]
+tokio = { version = "1.43", features = ["full", "sync", "time", "rt-multi-thread"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+thiserror = "2.0"
+tracing = "0.1"
+image = "0.25"
+base64 = "0.22"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+futures-util = "0.3"
+
+# Windows only — 各 crate 自己声明依赖
+# windows crate 放在需要的 crate 里单独引入
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

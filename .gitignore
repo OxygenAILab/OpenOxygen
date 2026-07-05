@@ -1,126 +1,50 @@
 # Dependencies
 node_modules/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
 
 # Build outputs
 dist/
-build/
+target/
+coverage/
 *.tsbuildinfo
-*.map
 
-# Native build artifacts (keep only release)
-native/build/Debug/
-native/build/Release/.deps/
-native/build/Release/*.a
-native/build/Release/*.lib
-native/build/Release/*.exp
-native/build/Release/*.ilk
-native/build/Release/*.pdb
+# Local runtime data
+output/
+memory_store/
+memory_store_example/
+playwright-report/
+test-results/
 
-# Archives and development files
-archives/
-backup/
-*.backup
-*.bak
-*.old
-*.orig
+# Logs and diagnostics
+*.log
+*_errors.txt
+check_out.txt
+all_errors.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Rust build artifacts (if using Rust)
-packages/*/target/
-packages/*/Cargo.lock
+# Screenshots and generated media
+screenshot.png
+screenshots/
+*.webm
+*.mp4
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
 
 # Temporary files
 *.tmp
 *.temp
-.cache/
-*.log
-logs/
-
-# IDE and editors
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-
-# OS files
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# Test outputs
-test-output/
-coverage/
-.nyc_output/
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Documentation build
-docs/_build/
-docs/.vuepress/dist/
-
-# Misc
-*.pid
-*.seed
-*.pid.lock
-.eslintcache
-.prettiercache
-
-# State and cache
-.state/
-.cache/
-.ollama/
-
-# Images
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.bmp
-*.webp
-
-# Test files
-test.txt
-
-# Model files
-*.gguf
-*.bin
-*.pt
-*.pth
-*.safetensors
-*.onnx
-*.tflite
-*.mlmodel
-
-# Large data files
-*.zip
-*.tar.gz
-*.tar.bz2
-*.7z
-*.rar
-
-# Reports
-reports/
-TEST_SUMMARY.md
-VERIFICATION_REPORT.md
-test-complete.cjs
-test-full-pipeline.cjs
-test-script-gen.cjs
-test-ollama.cjs
-test-simple.cjs
-DEPLOYMENT_FIX_SUMMARY.md
-
-# Old roadmap files
-2603141948.md
-AgentLOG.md
-26w15aB-26w15aHRoadmap.md
-OLB.md
-/test
-/tests
+.tmp/
+temp/
