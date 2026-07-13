@@ -6,11 +6,11 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use image::DynamicImage;
-use crate::uia::{UiaAutomation, ElementInfo, FindCondition, Rect, Point};
+use crate::uia::{ElementInfo, UiaAutomation};
 use crate::capture::ScreenCapture;
 use crate::input::InputSimulator;
 use crate::vision::VisionProcessor;
-use crate::{GuiAction, ActionType, Target, ActionParams, ActionResult, GuiError};
+use crate::{ActionResult, ActionType, GuiAction, GuiError, Target};
 
 /// GUI 控制器实现
 pub struct GuiControllerImpl {

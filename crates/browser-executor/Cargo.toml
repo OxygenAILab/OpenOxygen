@@ -1,0 +1,21 @@
+[package]
+name = "openoxygen-browser-executor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+openoxygen-core = { path = "../core" }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+openoxygen-cli-executor = { path = "../cli-executor" }
+openoxygen-gui-control = { path = "../gui-control" }
+openoxygen-vlm-connector = { path = "../vlm-connector" }
+tokio-test = "0.4"

@@ -1243,6 +1243,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "openoxygen-browser-executor"
+version = "26.0.0-alpha.1"
+dependencies = [
+ "chrono",
+ "openoxygen-cli-executor",
+ "openoxygen-core",
+ "openoxygen-gui-control",
+ "openoxygen-vlm-connector",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-test",
+]
+
+[[package]]
 name = "openoxygen-cli-executor"
 version = "26.0.0-alpha.1"
 dependencies = [
@@ -1280,6 +1296,7 @@ dependencies = [
  "base64",
  "chrono",
  "image",
+ "openoxygen-cli-executor",
  "openoxygen-core",
  "serde",
  "serde_json",

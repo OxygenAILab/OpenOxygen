@@ -1,18 +1,23 @@
 //! CLI 执行器
-//! 
+//!
 //! 执行命令行命令，捕获输出，管理长时间运行的进程
 
+use chrono::{DateTime, Utc};
+use openoxygen_core::error::CoreError;
+use openoxygen_core::runtime::{StepExecutor, StepResult};
+use openoxygen_core::scheduler::{StepType, TaskStep};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::process::Stdio;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
-pub mod shell;
 pub mod parser;
+pub mod shell;
 
 /// CLI 执行器
 pub struct CliExecutor {
@@ -78,20 +83,16 @@ pub enum OutputType {
 /// 运行中的进程
 #[derive(Debug)]
 struct RunningProcess {
-    id: String,
     child: Child,
     command: String,
     started_at: DateTime<Utc>,
-    stdout_buffer: Vec<String>,
-    stderr_buffer: Vec<String>,
 }
 
 impl CliExecutor {
     /// 创建新的 CLI 执行器
     pub fn new() -> Result<Self, CliError> {
-        let working_dir = std::env::current_dir()
-            .map_err(|e| CliError::IoError(e.to_string()))?;
-        
+        let working_dir = std::env::current_dir().map_err(|e| CliError::IoError(e.to_string()))?;
+
         Ok(Self {
             processes: Arc::new(RwLock::new(HashMap::new())),
             default_shell: Self::detect_shell(),
@@ -105,7 +106,7 @@ impl CliExecutor {
         {
             "powershell.exe".to_string()
         }
-        
+
         #[cfg(not(target_os = "windows"))]
         {
             std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
@@ -148,20 +149,58 @@ impl CliExecutor {
             cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
         }
 
-        // 启动进程
         let mut child = cmd.spawn()?;
-        let process_id = uuid::Uuid::new_v4().to_string();
 
-        // 捕获输出
+        if request.capture_output && !request.stream_output {
+            let timeout_ms = request.timeout_ms;
+            let command = request.command;
+            let output = if let Some(timeout_ms) = timeout_ms {
+                match tokio::time::timeout(
+                    tokio::time::Duration::from_millis(timeout_ms),
+                    child.wait_with_output(),
+                )
+                .await
+                {
+                    Ok(output) => output?,
+                    Err(_) => return Err(CliError::Timeout(command)),
+                }
+            } else {
+                child.wait_with_output().await?
+            };
+
+            let completed_at = Utc::now();
+            let duration_ms = start.elapsed().as_millis() as u64;
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let stdout_lines = stdout.lines().map(ToString::to_string).collect();
+            let stderr_lines = stderr.lines().map(ToString::to_string).collect();
+
+            return Ok(ExecutionResult {
+                success: output.status.success(),
+                exit_code: output.status.code(),
+                stdout,
+                stderr,
+                stdout_lines,
+                stderr_lines,
+                duration_ms,
+                command,
+                started_at,
+                completed_at,
+            });
+        }
         let mut stdout_lines = Vec::new();
         let mut stderr_lines = Vec::new();
         let mut stdout_all = String::new();
         let mut stderr_all = String::new();
 
         if request.capture_output {
-            let stdout = child.stdout.take()
+            let stdout = child
+                .stdout
+                .take()
                 .ok_or_else(|| CliError::IoError("Failed to capture stdout".to_string()))?;
-            let stderr = child.stderr.take()
+            let stderr = child
+                .stderr
+                .take()
                 .ok_or_else(|| CliError::IoError("Failed to capture stderr".to_string()))?;
 
             let mut stdout_reader = BufReader::new(stdout).lines();
@@ -176,7 +215,7 @@ impl CliExecutor {
                                 stdout_lines.push(line.clone());
                                 stdout_all.push_str(&line);
                                 stdout_all.push('\n');
-                                
+
                                 if request.stream_output {
                                     // 发送流式输出
                                     println!("[STDOUT] {}", line);
@@ -192,7 +231,7 @@ impl CliExecutor {
                                 stderr_lines.push(line.clone());
                                 stderr_all.push_str(&line);
                                 stderr_all.push('\n');
-                                
+
                                 if request.stream_output {
                                     // 发送流式输出
                                     eprintln!("[STDERR] {}", line);
@@ -208,7 +247,7 @@ impl CliExecutor {
                         }
                     }
                 }
-                
+
                 // 检查超时
                 if let Some(timeout) = request.timeout_ms {
                     if start.elapsed().as_millis() as u64 > timeout {
@@ -239,8 +278,10 @@ impl CliExecutor {
     }
 
     /// 执行并解析结构化输出
-    pub async fn execute_and_parse<T>(&self, request: ExecutionRequest) 
-        -> Result<parser::ParsedOutput<T>, CliError> 
+    pub async fn execute_and_parse<T>(
+        &self,
+        request: ExecutionRequest,
+    ) -> Result<parser::ParsedOutput<T>, CliError>
     where
         T: serde::de::DeserializeOwned,
     {
@@ -250,7 +291,9 @@ impl CliExecutor {
 
     /// 启动后台进程
     pub async fn spawn(&self, request: ExecutionRequest) -> Result<String, CliError> {
-        let cwd = request.cwd.as_deref()
+        let cwd = request
+            .cwd
+            .as_deref()
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| {
                 // 使用同步方式获取当前工作目录
@@ -268,7 +311,7 @@ impl CliExecutor {
         };
 
         cmd.current_dir(&cwd);
-        
+
         if let Some(env) = &request.env {
             cmd.envs(env);
         }
@@ -277,16 +320,16 @@ impl CliExecutor {
         let process_id = uuid::Uuid::new_v4().to_string();
 
         let process = RunningProcess {
-            id: process_id.clone(),
             child,
             command: request.command,
             started_at: Utc::now(),
-            stdout_buffer: Vec::new(),
-            stderr_buffer: Vec::new(),
         };
 
-        self.processes.write().await.insert(process_id.clone(), process);
-        
+        self.processes
+            .write()
+            .await
+            .insert(process_id.clone(), process);
+
         Ok(process_id)
     }
 
@@ -303,7 +346,8 @@ impl CliExecutor {
     /// 获取进程列表
     pub async fn list_processes(&self) -> Vec<(String, String, DateTime<Utc>)> {
         let processes = self.processes.read().await;
-        processes.iter()
+        processes
+            .iter()
             .map(|(id, p)| (id.clone(), p.command.clone(), p.started_at))
             .collect()
     }
@@ -324,24 +368,78 @@ impl CliExecutor {
     }
 }
 
+impl StepExecutor for CliExecutor {
+    fn execute_step<'a>(
+        &'a self,
+        step: &'a TaskStep,
+    ) -> Pin<Box<dyn Future<Output = Result<StepResult, CoreError>> + Send + 'a>> {
+        Box::pin(async move {
+            match &step.step_type {
+                StepType::CliCommand { command, cwd } => {
+                    let request = ExecutionRequest {
+                        command: command.clone(),
+                        cwd: cwd.clone(),
+                        env: None,
+                        timeout_ms: step
+                            .params
+                            .get("timeout_ms")
+                            .and_then(serde_json::Value::as_u64),
+                        capture_output: true,
+                        stream_output: false,
+                    };
+                    let result = self.execute(request).await.map_err(|err| {
+                        CoreError::SchedulerError(format!("CLI command failed: {}", err))
+                    })?;
+
+                    if !result.success {
+                        return Err(CoreError::SchedulerError(format!(
+                            "CLI command exited with code {:?}: {}",
+                            result.exit_code, result.stderr
+                        )));
+                    }
+
+                    Ok(StepResult::success(serde_json::json!({
+                        "command": result.command,
+                        "exit_code": result.exit_code,
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                        "duration_ms": result.duration_ms
+                    })))
+                }
+                StepType::Wait { duration_ms } => {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(*duration_ms)).await;
+                    Ok(StepResult::success(serde_json::Value::Null))
+                }
+                StepType::Condition { check } => Ok(StepResult::success(serde_json::json!({
+                    "check": check,
+                    "passed": true
+                }))),
+                _ => Err(CoreError::SchedulerError(
+                    "Step type is not supported by CliExecutor".to_string(),
+                )),
+            }
+        })
+    }
+}
+
 /// CLI 错误
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
     #[error("IO error: {0}")]
     IoError(String),
-    
+
     #[error("Command execution failed: {0}")]
     ExecutionFailed(String),
-    
+
     #[error("Timeout: {0}")]
     Timeout(String),
-    
+
     #[error("Process not found: {0}")]
     ProcessNotFound(String),
-    
+
     #[error("Invalid path: {0}")]
     InvalidPath(String),
-    
+
     #[error("Parse error: {0}")]
     ParseError(String),
 }
@@ -349,5 +447,81 @@ pub enum CliError {
 impl From<std::io::Error> for CliError {
     fn from(e: std::io::Error) -> Self {
         CliError::IoError(e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openoxygen_core::scheduler::{Task, TaskPriority, TaskStatus, TaskStep};
+    use openoxygen_core::CoreRuntime;
+
+    #[tokio::test]
+    async fn executes_cli_step() {
+        let executor = CliExecutor::new().expect("create cli executor");
+        let step = TaskStep {
+            id: "echo".to_string(),
+            step_type: StepType::CliCommand {
+                command: "echo openoxygen".to_string(),
+                cwd: None,
+            },
+            params: serde_json::Value::Null,
+            depends_on: Vec::new(),
+        };
+
+        let result = executor
+            .execute_step(&step)
+            .await
+            .expect("execute cli step");
+
+        assert!(result.success);
+        assert!(result.output["stdout"]
+            .as_str()
+            .unwrap()
+            .contains("openoxygen"));
+    }
+
+    #[tokio::test]
+    async fn runtime_executes_cli_task_to_completion() {
+        let executor = Arc::new(CliExecutor::new().expect("create cli executor"));
+        let runtime = CoreRuntime::with_step_executor(executor)
+            .await
+            .expect("create runtime");
+
+        runtime.start().await.expect("start runtime");
+
+        let task_id = "cli-e2e".to_string();
+        let task = Task {
+            id: task_id.clone(),
+            name: "CLI E2E".to_string(),
+            description: "Run a CLI command through CoreRuntime".to_string(),
+            priority: TaskPriority::Normal,
+            steps: vec![TaskStep {
+                id: "echo".to_string(),
+                step_type: StepType::CliCommand {
+                    command: "echo openoxygen-runtime".to_string(),
+                    cwd: None,
+                },
+                params: serde_json::Value::Null,
+                depends_on: Vec::new(),
+            }],
+            metadata: HashMap::new(),
+            created_at: Utc::now(),
+        };
+
+        runtime.submit_task(task).await.expect("submit task");
+
+        for _ in 0..30 {
+            if let Some(TaskStatus::Completed { .. }) = runtime.get_task_status(&task_id).await {
+                return;
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+
+        panic!(
+            "task did not complete: {:?}",
+            runtime.get_task_status(&task_id).await
+        );
     }
 }

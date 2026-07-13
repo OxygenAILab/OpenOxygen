@@ -28,9 +28,3 @@ pub enum CoreError {
     #[error("Channel error: {0}")]
     ChannelError(String),
 }
-
-impl<T> From<tokio::sync::mpsc::error::SendError<T>> for CoreError {
-    fn from(err: tokio::sync::mpsc::error::SendError<T>) -> Self {
-        CoreError::ChannelError(err.to_string())
-    }
-}

@@ -1,12 +1,13 @@
 //! 全局状态管理
-//! 
+//!
 //! 提供键值存储和向量记忆功能
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// 全局状态
+#[derive(Debug, Clone)]
 pub struct GlobalState {
     /// 键值存储
     kv_store: HashMap<String, Value>,
@@ -63,7 +64,12 @@ impl GlobalState {
     }
 
     /// 更新会话数据
-    pub fn update_session(&mut self, session_id: &str, key: impl Into<String>, value: Value) -> Result<(), String> {
+    pub fn update_session(
+        &mut self,
+        session_id: &str,
+        key: impl Into<String>,
+        value: Value,
+    ) -> Result<(), String> {
         if let Some(session) = self.sessions.get_mut(session_id) {
             session.data.insert(key.into(), value);
             Ok(())

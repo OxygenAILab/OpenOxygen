@@ -32,4 +32,5 @@ features = [
 ]
 
 [dev-dependencies]
+openoxygen-cli-executor = { path = "../cli-executor" }
 tokio-test = "0.4"

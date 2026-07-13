@@ -9,28 +9,24 @@
 ## Features
 
 ### Vision-First GUI Automation
-
 - **VLM Integration**: GPT-4V, Claude 3, Gemini, Qwen-VL, LLaVA support
 - **Visual Element Detection**: No need for brittle selectors
 - **Coordinate Prediction**: Precise (x, y) predictions from screenshots
 - **Multi-modal Understanding**: Understand UI context naturally
 
 ### Multi-Agent Architecture
-
 - **Agent Discovery**: Automatic agent detection and registration
 - **Collaborative Execution**: Parallel, sequential, competitive, voting modes
 - **Capability Matching**: Route tasks to specialized agents
 - **Message Routing**: Broadcast, unicast, multicast messaging
 
 ### Natural Language Orchestration
-
 - **Goal-Oriented Planning**: Describe your goal, system plans the steps
 - **Dynamic Adaptation**: Adjusts plans based on intermediate results
 - **Reflection Loop**: Self-improvement through execution feedback
 - **Tool Calling**: Standardized skill invocation
 
 ### Multi-Modal Execution
-
 - **GUI Control**: Windows UIA + Vision hybrid approach
 - **CLI Execution**: Full shell automation with structured output
 - **Browser Automation**: Playwright/CDP integration
@@ -59,20 +55,20 @@ cp .env.example .env
 #### TypeScript/JavaScript
 
 ```typescript
-import { OpenOxygen } from "openoxygen-next";
+import { OpenOxygen } from 'openoxygen-next';
 
 const agent = new OpenOxygen({
   llm: {
-    provider: "openai",
+    provider: 'openai',
     apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-4o",
-  },
+    model: 'gpt-4o',
+  }
 });
 
 // Execute a task
 const result = await agent.execute({
   description: 'Open Chrome and search for "AI news"',
-  mode: "gui",
+  mode: 'gui'
 });
 
 console.log(result.summary);
@@ -154,20 +150,20 @@ See [ALPHA1_RELEASE.md](docs/ALPHA1_RELEASE.md). Chinese copy: [ALPHA1_RELEASE.z
 ```typescript
 // Create specialized agents
 const guiAgent = await agent.createAgent({
-  type: "gui_specialist",
-  capabilities: ["screenshot", "click", "type"],
+  type: 'gui_specialist',
+  capabilities: ['screenshot', 'click', 'type']
 });
 
 const cliAgent = await agent.createAgent({
-  type: "cli_specialist",
-  capabilities: ["execute", "parse", "spawn"],
+  type: 'cli_specialist', 
+  capabilities: ['execute', 'parse', 'spawn']
 });
 
 // Collaborate on a task
 const result = await agent.collaborate({
-  task: "Build and deploy this project",
-  collaborationType: "sequential",
-  participants: [guiAgent.id, cliAgent.id],
+  task: 'Build and deploy this project',
+  collaborationType: 'sequential',
+  participants: [guiAgent.id, cliAgent.id]
 });
 ```
 
@@ -177,7 +173,7 @@ const result = await agent.collaborate({
 // VLM-powered element location
 const element = await agent.vision.locate({
   screenshot: await agent.gui.screenshot(),
-  description: 'The "Submit" button in the form',
+  description: 'The "Submit" button in the form'
 });
 
 // Click using visual coordinates
@@ -186,8 +182,8 @@ await agent.gui.click(element.x, element.y);
 // Or let the VLM predict the next action
 const action = await agent.vision.predictAction({
   screenshot: await agent.gui.screenshot(),
-  task: "Complete the login form",
-  history: previousActions,
+  task: 'Complete the login form',
+  history: previousActions
 });
 
 await agent.executeAction(action);
@@ -210,19 +206,19 @@ await agent.executeAction(action);
 ### Custom Skills
 
 ```typescript
-import { registerSkill } from "openoxygen-next";
+import { registerSkill } from 'openoxygen-next';
 
 registerSkill({
-  name: "custom_api_call",
-  description: "Make an API request",
+  name: 'custom_api_call',
+  description: 'Make an API request',
   parameters: [
-    { name: "url", type: "string", required: true },
-    { name: "method", type: "string", required: false, default: "GET" },
+    { name: 'url', type: 'string', required: true },
+    { name: 'method', type: 'string', required: false, default: 'GET' }
   ],
   execute: async (params, context) => {
     const response = await fetch(params.url);
     return { success: true, data: await response.json() };
-  },
+  }
 });
 ```
 
@@ -305,40 +301,36 @@ OpenOxygen/
 
 ## Comparison
 
-| Feature           | OpenOxygen Next | OpenClaw | UI-TARS | Hermes  |
-| ----------------- | --------------- | -------- | ------- | ------- |
-| Vision GUI        | Yes             | No       | Yes     | No      |
-| Multi-Agent       | Yes             | Yes      | No      | Partial |
-| LLM Orchestration | Yes             | Partial  | No      | Yes     |
-| CLI Integration   | Yes             | Yes      | No      | Yes     |
-| Windows Native    | Yes             | Yes      | No      | No      |
-| Open Source       | Yes             | Yes      | Yes     | Yes     |
+| Feature | OpenOxygen Next | OpenClaw | UI-TARS | Hermes |
+|---------|-----------------|----------|---------|--------|
+| Vision GUI | Yes | No | Yes | No |
+| Multi-Agent | Yes | Yes | No | Partial |
+| LLM Orchestration | Yes | Partial | No | Yes |
+| CLI Integration | Yes | Yes | No | Yes |
+| Windows Native | Yes | Yes | No | No |
+| Open Source | Yes | Yes | Yes | Yes |
 
 ## Roadmap
 
 ### Phase 1: Core (Completed)
-
 - [x] Task orchestrator framework
 - [x] LLM gateway
 - [x] Skill registry
 - [x] Agent bridge architecture
 
 ### Phase 2: Execution (In Progress)
-
 - [ ] Windows UIA integration
 - [ ] VLM connector
 - [ ] Screen capture optimization
 - [ ] CLI executor
 
 ### Phase 3: Multi-Agent (Planned)
-
 - [ ] Agent discovery service
 - [ ] Message routing
 - [ ] Collaboration modes
 - [ ] State synchronization
 
 ### Phase 4: Perception (Planned)
-
 - [ ] OCR integration
 - [ ] Element detection
 - [ ] Visual matching

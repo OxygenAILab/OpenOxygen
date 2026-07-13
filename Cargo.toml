@@ -6,6 +6,7 @@ members = [
     "crates/perception",
     "crates/agent-bridge",
     "crates/vlm-connector",
+    "crates/browser-executor",
     "crates/memory",
     "crates/ouv",
     "crates/htn-planner",
