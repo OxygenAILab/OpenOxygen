@@ -8,6 +8,11 @@ describe('isSendKeysCombo', () => {
     expect(isSendKeysCombo('{TAB}')).toBe(true);
   });
 
+  it('识别功能键 {F1}-{F12}', () => {
+    expect(isSendKeysCombo('{F5}')).toBe(true);
+    expect(isSendKeysCombo('{F12}')).toBe(true);
+  });
+
   it('识别修饰符组合键 #r / ^a / %{F4} / +{TAB} / ^{ESC}', () => {
     expect(isSendKeysCombo('#r')).toBe(true);
     expect(isSendKeysCombo('^a')).toBe(true);

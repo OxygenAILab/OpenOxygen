@@ -318,7 +318,9 @@ export class PlanExecutor {
       throw new Error('GUI controller not available');
     }
 
-    const { target, timeout = 30000 } = step.params;
+    const { target } = step.params;
+    // 显式 params.timeout 优先；否则使用步骤级 timeoutMs（错误恢复可放大它）
+    const timeout = step.params.timeout ?? step.timeoutMs ?? 30000;
     const start = Date.now();
 
     while (Date.now() - start < timeout) {
@@ -453,27 +455,22 @@ export class PlanExecutor {
       const page = this.config.memoryEngine.loadPage(pageId || key);
       return { retrieved: Boolean(page), key, page };
     }
-    
-    const value = scope === 'global' 
+
+    const value = scope === 'global'
       ? session.getGlobal(key)
       : session.get(key);
-    
-    return { retrieved: true, key, value };
+
+    // 如实报告命中情况，调用方才能区分 hit/miss
+    return { retrieved: value !== undefined && value !== null, key, value };
   }
 
   /**
    * 执行条件判断
    */
-  private async executeCondition(step: PlanStep, context: ExecutionContext): Promise<any> {
-    const { condition, thenSteps: _thenSteps = [], elseSteps: _elseSteps = [] } = step.params;
-    
-    const result = await this.evaluateCondition(condition, context);
-    
-    return {
-      condition,
-      result,
-      executedBranch: result ? 'then' : 'else',
-    };
+  private async executeCondition(_step: PlanStep, _context: ExecutionContext): Promise<any> {
+    // 诚实地快速失败：此前 condition 步骤静默返回恒真的 then 分支且不执行任何子步骤，
+    // 是伪装成功的 no-op。实现真正的条件求值前，直接报配置错误（不可重试）。
+    throw new Error('condition steps are not implemented yet; remove or replace them in the plan');
   }
 
   /**
@@ -622,12 +619,15 @@ export class PlanExecutor {
       return false;
     }
 
-    // 获取恢复策略
-    const strategy = getRecoveryStrategy(analysis, 1);
-    const maxRetries = Math.min(strategy.maxRetries, step.retryConfig?.maxRetries ?? this.config.maxRetries);
-
     // 尝试智能重试
+    const maxRetries = Math.min(
+      getRecoveryStrategy(analysis, 1).maxRetries,
+      step.retryConfig?.maxRetries ?? this.config.maxRetries
+    );
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      // 按重试轮次获取策略：delayMs 随 attempt 递增（1000*attempt），超时倍数同理
+      const strategy = getRecoveryStrategy(analysis, attempt);
+
       // 记录重试
       logger.retry(context.taskId, step.id, attempt, maxRetries, analysis.category, strategy);
 
@@ -678,15 +678,6 @@ export class PlanExecutor {
   ): Promise<void> {
     // 分析执行状态，必要时调整计划
     // TODO: 实现自适应调整逻辑
-  }
-
-  /**
-   * 评估条件
-   */
-  private async evaluateCondition(_condition: string, _context: ExecutionContext): Promise<boolean> {
-    // 简单条件评估
-    // TODO: 实现更复杂的条件表达式解析
-    return true;
   }
 
   /**

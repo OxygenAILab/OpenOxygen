@@ -38,6 +38,25 @@ export interface ErrorAnalysis {
 export function analyzeError(error: string, stepType: string): ErrorAnalysis {
   const lowerError = error.toLowerCase();
 
+  // 配置/参数错误（永久性，重试无意义）——必须先于元素定位判断：
+  // 否则 'Target is required' / 'Cannot resolve target' 会被 'target'
+  // 关键词误分类为可重试的定位失败，白白重试三次
+  if (
+    lowerError.includes('target is required') ||
+    lowerError.includes('cannot resolve target') ||
+    lowerError.includes('not available') ||
+    lowerError.includes('unknown step type') ||
+    lowerError.includes('not implemented') ||
+    lowerError.includes('not supported')
+  ) {
+    return {
+      category: ErrorCategory.ConfigError,
+      reason: '配置或参数错误（永久性）',
+      canRetry: false,
+      suggestedFix: '检查步骤参数与执行环境配置',
+    };
+  }
+
   // 元素定位失败
   if (
     lowerError.includes('not found') ||

@@ -133,14 +133,26 @@ Generate plan with steps that can be executed by the system.`;
       format: 'json',
     });
 
-    const planData = JSON.parse(response.content);
-    
+    let planData: any;
+    try {
+      planData = JSON.parse(response.content);
+    } catch {
+      throw new Error(`LLM returned invalid JSON: ${response.content.slice(0, 200)}`);
+    }
+    if (!Array.isArray(planData.steps)) {
+      throw new Error('plan JSON is missing the steps array');
+    }
+
+    // 依赖图必须基于 enrich 后的步骤构建：原始步骤可能缺 id，
+    // enrich 会生成 step_N_xxx 形式的 id，两者对不上会让依赖图变成垃圾数据
+    const enrichedSteps = this.validateAndEnrichSteps(planData.steps);
+
     return {
       taskId: params.taskId,
       version: '2.0',
       description: params.description,
-      steps: this.validateAndEnrichSteps(planData.steps),
-      dependencies: this.buildDependencyMap(planData.steps),
+      steps: enrichedSteps,
+      dependencies: this.buildDependencyMap(enrichedSteps),
       rollbackSteps: planData.rollbackSteps,
     };
   }
@@ -190,18 +202,12 @@ Generate plan with steps that can be executed by the system.`;
 
   /**
    * 优化计划
+   * 注意：mergeShortSteps 产出的 'parallel' 批量步骤当前不被执行器支持
+   * （executeStep 无该 case），且会破坏依赖边。在实现 executor 端
+   * 'parallel' 支持之前，本方法保持恒等变换，不做合并。
    */
   async optimizePlan(plan: TaskPlan): Promise<TaskPlan> {
-    // 识别可以并行执行的步骤
-    const _parallelGroups = this.identifyParallelGroups(plan);
-    
-    // 合并短步骤
-    const mergedSteps = this.mergeShortSteps(plan.steps);
-
-    return {
-      ...plan,
-      steps: mergedSteps,
-    };
+    return plan;
   }
 
   /**
@@ -227,6 +233,10 @@ Generate plan with steps that can be executed by the system.`;
       if (group.length > 0) {
         groups.push(group);
         group.forEach(id => executed.add(id));
+      } else {
+        // 依赖无法满足（引用不存在的步骤或循环依赖）——必须终止，否则死循环
+        const remaining = plan.steps.filter(s => !executed.has(s.id)).map(s => s.id);
+        throw new Error(`unresolvable step dependencies: ${remaining.join(', ')}`);
       }
     }
     

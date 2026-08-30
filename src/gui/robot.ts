@@ -110,8 +110,8 @@ export function isSendKeysCombo(text: string): boolean {
   if (typeof text !== 'string' || text.length === 0) {
     return false;
   }
-  // 单键：{ENTER} / {ESC} 等（大写字母组成）
-  if (/^\{[A-Z]+\}$/.test(text)) {
+  // 单键：{ENTER} / {ESC} / {F5} 等（大写字母开头，可带数字，如功能键）
+  if (/^\{[A-Z]+[0-9]*\}$/.test(text)) {
     return true;
   }
   // 组合键：修饰符前缀 + 键名（可带大括号），如 #r、^a、%{F4}、+{TAB}、^{ESC}
@@ -241,8 +241,8 @@ export class RobotGuiController {
         throw new Error('Key must be a non-empty string');
       }
 
-      // 处理特殊键名（大括号包裹）
-      const specialKeyMatch = key.match(/^\{([A-Z]+)\}$/);
+      // 处理特殊键名（大括号包裹，含功能键 {F1}-{F12}）
+      const specialKeyMatch = key.match(/^\{([A-Z]+[0-9]*)\}$/);
       if (specialKeyMatch) {
         const keyName = specialKeyMatch[1].toLowerCase();
         const keyMap: Record<string, string> = {
@@ -262,6 +262,9 @@ export class RobotGuiController {
           'end': 'end',
           'pageup': 'pageup',
           'pagedown': 'pagedown',
+          'f1': 'f1', 'f2': 'f2', 'f3': 'f3', 'f4': 'f4',
+          'f5': 'f5', 'f6': 'f6', 'f7': 'f7', 'f8': 'f8',
+          'f9': 'f9', 'f10': 'f10', 'f11': 'f11', 'f12': 'f12',
         };
         const robotKey = keyMap[keyName];
         if (robotKey) {
@@ -284,8 +287,8 @@ export class RobotGuiController {
         const char = key.slice(1).replace('{', '').replace('}', '').toLowerCase();
         robot.keyTap(char, ['alt']);
       } else if (key.startsWith('+')) {
-        // Shift + 字母
-        const char = key.slice(1).toLowerCase();
+        // Shift + 键（与 Ctrl/Alt 分支一致：剥离大括号，否则 {TAB} 会作为字面键名传入）
+        const char = key.slice(1).replace('{', '').replace('}', '').toLowerCase();
         robot.keyTap(char, ['shift']);
       } else {
         // 单个按键
