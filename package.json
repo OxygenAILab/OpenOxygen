@@ -1,6 +1,6 @@
 {
   "name": "openoxygen-next",
-  "version": "26.0.0-alpha.1",
+  "version": "26.0.0-alpha.2",
   "description": "OpenOxygen Next - Vision-first Computer Use Agent with multi-agent orchestration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

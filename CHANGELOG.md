@@ -5,6 +5,47 @@ All notable changes to OpenOxygen Next will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [26.0.0-alpha.2] - 2026-08-30
+
+### Phase 2 Execution Layer — Alpha 2
+
+#### Added
+
+- TS-first execution layer: robotjs GUI controller (~15ms/action vs ~50ms PowerShell),
+  SimplePlanner (env-based LLM config, fail-fast on missing key), PlanExecutor with
+  two-tier target resolution (UIA first, vision fallback)
+- Observability: JSON Lines structured logger + metrics collector (success rates,
+  latency percentiles, token usage, locator hit rates)
+- Multimodal inference engine: images correctly encoded for openai (data URI),
+  anthropic (base64 source blocks), gemini (inlineData parts, systemInstruction),
+  ollama (raw base64 in messages[].images); MIME detection via magic bytes
+- No-key testing infrastructure: mock-brain server implementing all four provider
+  protocols with live (AI-as-brain) and scripted (regression) modes
+- Error recovery: 7-category error analysis with adaptive retry strategies
+- Real PNG screenshot encoding (zero-dependency zlib encoder, BGRA→RGBA)
+- Real-API validation scripts (planner e2e, four-provider vision, dual-channel)
+
+#### Changed
+
+- Architecture: all-in TypeScript; Rust execution crates deprecated (kept for
+  future napi addons)
+- Security: removed hardcoded API key; all LLM config via environment variables
+- jest test suite grew 15 → 36; tsc strict-clean
+
+#### Fixed
+
+- P0: action failures were reported as success (validateStep stub)
+- P0: failed dependencies counted as satisfied
+- P0: empty-text gui_type steps were zero-event no-ops reported as success
+- P0: executeStream crashed on first step (null context)
+- P0: screenshots were raw bitmaps disguised as PNG (vision fallback broken)
+- SendKeys combo routing in type_text (e.g. "#r" now opens Win+R)
+
+#### Deprecated
+
+- Rust execution crates (core, gui-control, cli-control, browser-control,
+  htn-planner, scheduler, agent-bridge, ouv, http-server)
+
 ## [26.0.0-alpha.1] - 2026-07-05
 
 ### Phase 4/5 Alpha 1
