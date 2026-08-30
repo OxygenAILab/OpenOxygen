@@ -148,7 +148,7 @@ Generate plan with steps that can be executed by the system.`;
   /**
    * 验证和丰富步骤
    */
-  private validateAndEnrichSteps(steps: any[]): PlanStep[] {
+  protected validateAndEnrichSteps(steps: any[]): PlanStep[] {
     return steps.map((step, index) => ({
       id: step.id || `step_${index}_${uuidv4().slice(0, 8)}`,
       type: step.type as StepType,
@@ -180,7 +180,7 @@ Generate plan with steps that can be executed by the system.`;
   /**
    * 构建依赖图
    */
-  private buildDependencyMap(steps: PlanStep[]): Map<string, string[]> {
+  protected buildDependencyMap(steps: PlanStep[]): Map<string, string[]> {
     const map = new Map<string, string[]>();
     for (const step of steps) {
       map.set(step.id, step.dependencies);

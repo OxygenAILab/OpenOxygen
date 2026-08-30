@@ -1,12 +1,15 @@
 /**
  * 计划执行器
- * 
+ *
  * 执行规划好的任务步骤
  */
 
 import { TaskPlan, PlanStep } from './planner';
 import { StepResult } from './mod';
 import { SessionContext } from './context';
+import { saveScreenshot, findElement } from '../execution/vision';
+import { analyzeError, getRecoveryStrategy } from './error-recovery';
+import { logger, metrics } from '../observability';
 
 export interface ExecutorConfig {
   guiController?: any;
@@ -47,7 +50,11 @@ export class PlanExecutor {
    */
   async execute(context: ExecutionContext, session: SessionContext): Promise<StepResult[]> {
     this.isRunning = true;
+    this.taskId = context.taskId; // 存储 taskId 供 locateByVision 等方法使用
     const results: StepResult[] = [];
+
+    // 记录任务开始
+    logger.taskStart(context.taskId, context.plan.description, 'execute');
 
     try {
       for (let i = 0; i < context.plan.steps.length && this.isRunning; i++) {
@@ -57,14 +64,19 @@ export class PlanExecutor {
         // 检查依赖
         const depsReady = await this.checkDependencies(step, results, context);
         if (!depsReady) {
-          results.push({
+          const result: StepResult = {
             stepId: step.id,
             type: step.type,
             success: false,
             output: null,
             durationMs: 0,
             error: `Dependencies not met: ${step.dependencies.join(', ')}`,
-          });
+          };
+          results.push(result);
+
+          // 记录步骤失败
+          logger.stepEnd(context.taskId, step.id, step.type, false, undefined, result.error);
+          metrics.recordStep(step.type, false, 0);
           continue;
         }
 
@@ -90,6 +102,11 @@ export class PlanExecutor {
       }
     } finally {
       this.isRunning = false;
+
+      // 记录任务结束
+      const successCount = results.filter(r => r.success).length;
+      logger.taskEnd(context.taskId, successCount === results.length, results.length, successCount);
+      metrics.recordTask(successCount === results.length, Date.now() - context.startTime);
     }
 
     return results;
@@ -142,11 +159,14 @@ export class PlanExecutor {
    * 执行单个步骤
    */
   private async executeStep(
-    step: PlanStep, 
+    step: PlanStep,
     context: ExecutionContext,
     session: SessionContext
   ): Promise<StepResult> {
     const startTime = Date.now();
+
+    // 记录步骤开始
+    logger.stepStart(context.taskId, step.id, step.type, step.description, step.params);
 
     try {
       let result: any;
@@ -199,23 +219,37 @@ export class PlanExecutor {
       // 验证结果
       const validation = await this.validateStep(step, result);
 
-      return {
+      const durationMs = Date.now() - startTime;
+      const stepResult: StepResult = {
         stepId: step.id,
         type: step.type,
         success: validation.success,
         output: result,
         screenshot: result?.screenshot,
-        durationMs: Date.now() - startTime,
+        durationMs,
         error: validation.error,
       };
+
+      // 记录步骤结束
+      logger.stepEnd(context.taskId, step.id, step.type, validation.success, result, validation.error);
+      metrics.recordStep(step.type, validation.success, durationMs);
+
+      return stepResult;
     } catch (error) {
+      const durationMs = Date.now() - startTime;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+
+      // 记录步骤失败
+      logger.stepEnd(context.taskId, step.id, step.type, false, undefined, errorMsg);
+      metrics.recordStep(step.type, false, durationMs);
+
       return {
         stepId: step.id,
         type: step.type,
         success: false,
         output: null,
-        durationMs: Date.now() - startTime,
-        error: error instanceof Error ? error.message : String(error),
+        durationMs,
+        error: errorMsg,
       };
     }
   }
@@ -229,12 +263,18 @@ export class PlanExecutor {
     }
 
     const { target, button = 'left' } = step.params;
-    
+
     // 解析目标
     const coords = await this.resolveGuiTarget(target);
-    
-    // 执行点击
-    return await this.config.guiController.click(coords.x, coords.y, button);
+
+    // 执行点击（根据 button 类型选择方法）
+    if (button === 'right') {
+      return await this.config.guiController.right_click(coords.x, coords.y);
+    } else if (button === 'double') {
+      return await this.config.guiController.double_click(coords.x, coords.y);
+    } else {
+      return await this.config.guiController.click(coords.x, coords.y);
+    }
   }
 
   /**
@@ -246,18 +286,19 @@ export class PlanExecutor {
     }
 
     const { target, text, clearFirst = false } = step.params;
-    
+
     if (target) {
       const coords = await this.resolveGuiTarget(target);
       await this.config.guiController.click(coords.x, coords.y);
     }
 
     if (clearFirst) {
-      await this.config.guiController.keyCombo('ctrl', 'a');
+      // Ctrl+A 全选
+      await this.config.guiController.key_press('^a');
       await this.delay(100);
     }
 
-    return await this.config.guiController.typeText(text);
+    return await this.config.guiController.type_text(text);
   }
 
   /**
@@ -439,14 +480,79 @@ export class PlanExecutor {
     }
 
     if (typeof target === 'string') {
-      // 可能是元素描述，使用视觉定位
+      // 第 1 级：UIA 系统级元素定位（最准，零 VLM token）
       if (this.config.guiController?.locateByDescription) {
-        return await this.config.guiController.locateByDescription(target);
+        try {
+          const coords = await this.config.guiController.locateByDescription(target);
+          if (coords && typeof coords.x === 'number' && typeof coords.y === 'number') {
+            // 记录 UIA 命中
+            metrics.recordLocator('uia', true);
+            return { x: coords.x, y: coords.y };
+          }
+        } catch {
+          // UIA 定位失败，记录未命中
+          metrics.recordLocator('uia', false);
+
+          // 记录 fallback 事件
+          logger.locatorFallback(
+            this.taskId || 'unknown',
+            'current',
+            target,
+            'UIA',
+            'VLM',
+            'UIA 未找到元素或无坐标'
+          );
+        }
+      }
+
+      // 第 2 级：视觉定位兜底（处理 UIA 拿不到的画面：canvas、游戏、图片按钮）
+      const visual = await this.locateByVision(target);
+      if (visual) {
+        // 记录 VLM 命中
+        metrics.recordLocator('vlm', true);
+        return visual;
+      } else {
+        // 记录 VLM 未命中
+        metrics.recordLocator('vlm', false);
       }
     }
 
     throw new Error(`Cannot resolve target: ${JSON.stringify(target)}`);
   }
+
+  /**
+   * 视觉定位：截图 → VLM 找元素 → 返回 bounds 中心点
+   */
+  private async locateByVision(description: string): Promise<{ x: number; y: number } | null> {
+    if (!this.config.guiController?.screenshot) {
+      return null;
+    }
+
+    try {
+      const base64 = await this.config.guiController.screenshot();
+      if (!base64) {
+        return null;
+      }
+
+      const imagePath = await saveScreenshot(base64);
+      const sizeKb = Math.round(Buffer.from(base64, 'base64').length / 1024);
+
+      // 记录截图事件
+      logger.screenshot(this.taskId || 'unknown', 'locator', imagePath, sizeKb);
+
+      const element = await findElement(imagePath, description);
+      if (!element || !element.bounds) {
+        return null;
+      }
+
+      const { x, y, width, height } = element.bounds;
+      return { x: Math.round(x + width / 2), y: Math.round(y + height / 2) };
+    } catch {
+      return null;
+    }
+  }
+
+  private taskId: string | null = null;
 
   /**
    * 检查依赖
@@ -471,7 +577,7 @@ export class PlanExecutor {
   }
 
   /**
-   * 处理失败
+   * 处理失败（智能恢复）
    */
   private async handleFailure(
     step: PlanStep,
@@ -479,13 +585,61 @@ export class PlanExecutor {
     context: ExecutionContext,
     session: SessionContext
   ): Promise<boolean> {
-    // 尝试重试
-    for (let i = 0; i < step.retryConfig.maxRetries; i++) {
-      await this.delay(step.retryConfig.backoffMs * (i + 1));
-      
-      const retryResult = await this.executeStep(step, context, session);
+    if (!result.error) {
+      return false; // 没有错误信息，无法分析
+    }
+
+    // 分析错误类型
+    const analysis = analyzeError(result.error, step.type);
+
+    logger.log({
+      level: 'warn',
+      type: 'error',
+      taskId: context.taskId,
+      stepId: step.id,
+      message: `步骤失败: ${analysis.reason}`,
+      data: { category: analysis.category, canRetry: analysis.canRetry, suggestedFix: analysis.suggestedFix },
+      tags: ['error_recovery'],
+    });
+
+    if (!analysis.canRetry) {
+      return false;
+    }
+
+    // 获取恢复策略
+    const strategy = getRecoveryStrategy(analysis, 1);
+    const maxRetries = Math.min(strategy.maxRetries, step.retryConfig.maxRetries);
+
+    // 尝试智能重试
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      // 记录重试
+      logger.retry(context.taskId, step.id, attempt, maxRetries, analysis.category, strategy);
+
+      // 延迟
+      await this.delay(strategy.delayMs);
+
+      // 创建修改后的步骤
+      const modifiedStep = { ...step };
+
+      // 应用恢复策略
+      if (strategy.timeoutMultiplier) {
+        modifiedStep.timeoutMs = Math.round(step.timeoutMs * strategy.timeoutMultiplier);
+      }
+
+      if (strategy.shouldCaptureScreenshot) {
+        modifiedStep.captureScreenshot = true;
+      }
+
+      // 重试执行
+      const retryResult = await this.executeStep(modifiedStep, context, session);
+
       if (retryResult.success) {
+        // 记录重试成功
+        metrics.recordRetry(analysis.category, true);
         return true;
+      } else {
+        // 记录重试失败
+        metrics.recordRetry(analysis.category, false);
       }
     }
 

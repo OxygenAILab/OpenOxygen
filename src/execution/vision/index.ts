@@ -103,31 +103,35 @@ export async function analyzeScreenshot(
     const messages: ChatMessage[] = [
       {
         role: 'user',
-        content: `[图片: data:image/png;base64,${base64Image}]
-${request.prompt || DEFAULT_ANALYSIS_PROMPT}`
+        content: request.prompt || DEFAULT_ANALYSIS_PROMPT,
+        images: [base64Image]
       }
     ];
 
     const response = await runInference({
       messages,
-      model: VISION_MODELS.qwen3vl,
+      model: VISION_MODELS.qwen3vlSmall,
       maxTokens: 2000
     });
 
     const content = response.content;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
-    
-    if (jsonMatch) {
-      const data = JSON.parse(jsonMatch[0]);
-      
-      const result: VisionAnalysisResult = {
-        success: true,
-        description: data.description || content.substring(0, 200),
-        elements: data.elements || [],
-        actions: data.actions || []
-      };
 
-      return result;
+    if (jsonMatch) {
+      try {
+        const data = JSON.parse(jsonMatch[0]);
+
+        const result: VisionAnalysisResult = {
+          success: true,
+          description: data.description || content.substring(0, 200),
+          elements: data.elements || [],
+          actions: data.actions || []
+        };
+
+        return result;
+      } catch (e) {
+        // JSON 解析失败，返回纯文本响应
+      }
     }
 
     return {
@@ -178,14 +182,28 @@ export async function findElement(
   try {
     const result = await analyzeScreenshot({
       imagePath,
-      prompt: `在截图中查找"${elementDescription}"，返回元素的精确位置和类型。如果找不到，返回"未找到"。`
+      prompt: `在截图中查找"${elementDescription}"。必须返回 JSON 格式：
+{
+  "found": true/false,
+  "elements": [
+    {
+      "id": "1",
+      "type": "窗口/按钮/输入框",
+      "text": "元素文本",
+      "bounds": {"x": 左上角X, "y": 左上角Y, "width": 宽度, "height": 高度},
+      "confidence": 0.0-1.0
+    }
+  ]
+}
+
+如果找到，返回元素的像素坐标（左上角 x,y + 宽高）。如果找不到，返回 {"found": false, "elements": []}`
     });
 
     if (result.elements && result.elements.length > 0) {
-      const element = result.elements.find(e => 
+      const element = result.elements.find(e =>
         e.text?.toLowerCase().includes(elementDescription.toLowerCase())
       ) || result.elements[0];
-      
+
       return element;
     }
 

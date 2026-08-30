@@ -398,4 +398,46 @@ export class WindowsGuiController {
 
     return null;
   }
+
+  /**
+   * 通过描述定位元素并返回其中心点坐标（UIA 路径）
+   *
+   * 优先走系统级 UIA（准确、零 VLM 开销）。找不到、或元素无有效
+   * BoundingRectangle 时返回 null，交由上层决定是否走视觉兜底。
+   */
+  async locateByDescription(description: string): Promise<{ x: number; y: number } | null> {
+    const el = await this.find_element(description);
+    return WindowsGuiController.centerOfElement(el);
+  }
+
+  /**
+   * 从 UIA 元素的 BoundingRectangle 计算中心点。
+   *
+   * find_element 的策略 1/2 返回带 BoundingRectangle 的对象，策略 3
+   * （Get-Process 兜底）只有 ProcessId，无坐标 —— 此时返回 null。
+   */
+  static centerOfElement(el: any): { x: number; y: number } | null {
+    const rect = el?.BoundingRectangle;
+    if (!rect) return null;
+
+    const { X, Y, Width, Height } = rect;
+    if (
+      typeof X !== 'number' ||
+      typeof Y !== 'number' ||
+      typeof Width !== 'number' ||
+      typeof Height !== 'number'
+    ) {
+      return null;
+    }
+
+    // UIA 对屏外/隐藏元素会返回非常大的坐标（如 int.MaxValue），过滤掉
+    if (Width <= 0 || Height <= 0 || !Number.isFinite(X) || !Number.isFinite(Y)) {
+      return null;
+    }
+
+    return {
+      x: Math.round(X + Width / 2),
+      y: Math.round(Y + Height / 2),
+    };
+  }
 }
