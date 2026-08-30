@@ -1,20 +1,22 @@
 [workspace]
 members = [
-    "crates/core",
-    "crates/gui-control",
-    "crates/cli-executor",
-    "crates/perception",
-    "crates/agent-bridge",
-    "crates/vlm-connector",
-    "crates/browser-executor",
-    "crates/memory",
-    "crates/ouv",
-    "crates/htn-planner",
+    # Core infrastructure (kept for napi addons)
+    "crates/vlm-connector",        # → Will be compiled to napi addon
+    "crates/memory",               # → Future: vector store addon
+
+    # Deprecated: Moved to TypeScript for faster iteration
+    # "crates/core",               # Executor logic → src/orchestrator/
+    # "crates/gui-control",        # GUI automation → src/gui/ + nut-js
+    # "crates/cli-executor",       # CLI → src/execution/cli/
+    # "crates/perception",         # Vision → src/execution/vision/
+    # "crates/agent-bridge",       # Not needed in TS-first architecture
+    # "crates/browser-executor",   # Browser → Playwright in TS
+    # "crates/ouv",                # Utility crate, not in critical path
+    # "crates/htn-planner",        # Planning → src/orchestrator/planner.ts
 ]
 resolver = "2"
 
 [workspace.package]
-name = "openoxygen-next"
 version = "26.0.0-alpha.1"
 edition = "2021"
 authors = ["OpenOxygen Team"]

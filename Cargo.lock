@@ -86,17 +86,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-trait"
-version = "0.1.89"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1228,37 +1217,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "openoxygen-agent-bridge"
-version = "26.0.0-alpha.1"
-dependencies = [
- "chrono",
- "openoxygen-core",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-test",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "openoxygen-browser-executor"
-version = "26.0.0-alpha.1"
-dependencies = [
- "chrono",
- "openoxygen-cli-executor",
- "openoxygen-core",
- "openoxygen-gui-control",
- "openoxygen-vlm-connector",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-test",
-]
-
-[[package]]
 name = "openoxygen-cli-executor"
 version = "26.0.0-alpha.1"
 dependencies = [
@@ -1309,25 +1267,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openoxygen-htn-planner"
-version = "26.0.0-alpha.1"
-dependencies = [
- "async-trait",
- "chrono",
- "openoxygen-cli-executor",
- "openoxygen-core",
- "openoxygen-gui-control",
- "openoxygen-memory",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-test",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "openoxygen-memory"
 version = "26.0.0-alpha.1"
 dependencies = [
@@ -1335,42 +1274,6 @@ dependencies = [
  "dirs",
  "openoxygen-core",
  "rusqlite",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-test",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "openoxygen-ouv"
-version = "26.0.0-alpha.1"
-dependencies = [
- "base64",
- "chrono",
- "image",
- "openoxygen-core",
- "openoxygen-memory",
- "openoxygen-vlm-connector",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-test",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "openoxygen-perception"
-version = "26.0.0-alpha.1"
-dependencies = [
- "base64",
- "chrono",
- "image",
- "openoxygen-core",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

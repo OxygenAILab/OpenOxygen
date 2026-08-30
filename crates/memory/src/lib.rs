@@ -592,9 +592,7 @@ pub mod vector_store {
 
 pub mod decay {
     //! 衰减算法
-    
-    use super::*;
-    
+
     /// 计算时间衰减后的重要性
     pub fn apply_decay(importance: f32, decay_factor: f32, hours: f32) -> f32 {
         importance * (-decay_factor * hours).exp()

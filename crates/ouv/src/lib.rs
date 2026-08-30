@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use image::{DynamicImage, Rgba, ImageBuffer};
+use image::DynamicImage;
 use serde::{Deserialize, Serialize};
 
 // 内联 stub 模块定义在文件底部（pixel_layer, feature_layer, semantic_layer）

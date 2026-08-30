@@ -834,8 +834,8 @@ impl HtnPlanner {
     fn build_dag(&self, network: &TaskNetwork) -> Result<DagPlan, PlannerError> {
         let mut dag_nodes = Vec::new();
         let mut dag_edges = Vec::new();
-        let mut entry_points = Vec::new();
-        let mut exit_points = Vec::new();
+        let entry_points;
+        let exit_points;
         
         // 只包含原始任务
         for (id, node) in &network.tasks {
@@ -947,7 +947,7 @@ impl HtnPlanner {
             .ok_or_else(|| PlannerError::TaskNotFound(failed_task_id.to_string()))?;
         
         // 尝试其他方法
-        let mut new_request = PlanRequest {
+        let new_request = PlanRequest {
             root_task: failed_task.task.clone(),
             initial_state: current_state,
             goal_state: None,
@@ -959,8 +959,8 @@ impl HtnPlanner {
         };
         
         // 如果原任务是复合任务，标记已尝试的方法
-        if let TaskType::Compound(compound) = &failed_task.task.task_type {
-            if let Some(method_id) = &failed_task.plan_info.selected_method {
+        if let TaskType::Compound(_compound) = &failed_task.task.task_type {
+            if let Some(_method_id) = &failed_task.plan_info.selected_method {
                 // TODO: 排除已失败的方法
             }
         }
@@ -1008,11 +1008,11 @@ pub mod domain {
 pub mod decomposer {
     //! 任务分解器
     
-    use super::*;
+    
 }
 
 pub mod resolver {
     //! 冲突消解器
     
-    use super::*;
+    
 }

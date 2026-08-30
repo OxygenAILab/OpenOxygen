@@ -3,7 +3,7 @@
 //! 对标 OpenClaw 的多 Agent 通信机制
 //! 支持 Agent 发现、消息路由、协作编排
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use serde::{Deserialize, Serialize};
@@ -517,11 +517,11 @@ pub mod discovery {
 pub mod messaging {
     //! 消息传输实现
     
-    use super::*;
+    
 }
 
 pub mod coordination {
     //! 协调服务
     
-    use super::*;
+    
 }
