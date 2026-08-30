@@ -221,10 +221,7 @@ async function callGemini(
   config: ProviderConfig,
   request: InferenceRequest
 ): Promise<InferenceResponse> {
-  const contents = request.messages.map((m) => ({
-    role: m.role === 'user' ? 'user' : 'model',
-    parts: [{ text: m.content }],
-  }));
+  const contents = buildGeminiContents(request.messages);
 
   const response = await fetch(
     `${config.baseUrl}/models/${config.model}:generateContent?key=${config.apiKey}`,
@@ -235,6 +232,9 @@ async function callGemini(
       },
       body: JSON.stringify({
         contents,
+        ...(request.systemPrompt
+          ? { systemInstruction: { parts: [{ text: request.systemPrompt }] } }
+          : {}),
         generationConfig: {
           maxOutputTokens: request.maxTokens ?? 2048,
           temperature: request.temperature ?? 0.7,
