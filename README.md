@@ -2,34 +2,48 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**OpenOxygen Next** - Vision-first Computer Use Agent with multi-agent orchestration
+**OpenOxygen Next** - Vision-first Computer Use Agent with TypeScript-first architecture
 
 > OpenOxygen 第一代架构重写，融合 OpenClaw 的多 Agent 通信、UI-TARS 的视觉驱动 GUI 操作、以及 Hermes 的 LLM 编排架构。
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│         TypeScript Main Logic               │
+│  (Planner, Orchestrator, Executors)         │
+├─────────────────────────────────────────────┤
+│  GUI: nut-js / UIA (PowerShell bridge)      │
+│  CLI: Node.js child_process                 │
+│  Browser: Playwright                        │
+│  Vision: Ollama VLM (qwen3-vl)              │
+├─────────────────────────────────────────────┤
+│   Rust Addons (napi-rs, performance)        │
+│   • vlm-connector (VLM inference)           │
+│   • memory (vector store, future)           │
+└─────────────────────────────────────────────┘
+```
+
+**Design Decision**: TypeScript-first for rapid iteration on Agent intelligence (Planner, error recovery). Rust provides performance-critical addons via napi, not a parallel execution layer.
 
 ## Features
 
 ### Vision-First GUI Automation
-- **VLM Integration**: GPT-4V, Claude 3, Gemini, Qwen-VL, LLaVA support
-- **Visual Element Detection**: No need for brittle selectors
-- **Coordinate Prediction**: Precise (x, y) predictions from screenshots
-- **Multi-modal Understanding**: Understand UI context naturally
-
-### Multi-Agent Architecture
-- **Agent Discovery**: Automatic agent detection and registration
-- **Collaborative Execution**: Parallel, sequential, competitive, voting modes
-- **Capability Matching**: Route tasks to specialized agents
-- **Message Routing**: Broadcast, unicast, multicast messaging
+- **Hybrid Locator**: UIA (fast, accurate) → VLM fallback (handles canvas/game UI)
+- **Zero-token Path**: Windows UIA covers 90% cases without VLM cost
+- **Visual Element Detection**: Ollama qwen3-vl for complex UI understanding
+- **Coordinate Prediction**: Precise (x, y) from screenshots or UIA bounds
 
 ### Natural Language Orchestration
-- **Goal-Oriented Planning**: Describe your goal, system plans the steps
+- **Goal-Oriented Planning**: Describe your goal, LLM generates `PlanStep[]`
 - **Dynamic Adaptation**: Adjusts plans based on intermediate results
 - **Reflection Loop**: Self-improvement through execution feedback
 - **Tool Calling**: Standardized skill invocation
 
 ### Multi-Modal Execution
-- **GUI Control**: Windows UIA + Vision hybrid approach
+- **GUI Control**: Windows UIA + nut-js, real-world tested
 - **CLI Execution**: Full shell automation with structured output
-- **Browser Automation**: Playwright/CDP integration
+- **Browser Automation**: Playwright integration (planned)
 - **Custom Skills**: Extensible plugin system
 
 ## Quick Start

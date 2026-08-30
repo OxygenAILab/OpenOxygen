@@ -48,3 +48,10 @@ Thumbs.db
 *.temp
 .tmp/
 temp/
+
+# AI session data (tool-local)
+.claude/
+.opencode-data/
+.cherry_migration/
+.trae/
+.qwen-agent-sessions/
