@@ -1,0 +1,20 @@
+{
+  "rules": [
+    {
+      "match": "生成执行计划",
+      "content": "{\"steps\":[{\"id\":\"step1\",\"type\":\"gui_type\",\"description\":\"Win+R 打开运行对话框\",\"params\":{\"text\":\"#r\"},\"dependencies\":[]},{\"id\":\"step2\",\"type\":\"wait\",\"description\":\"等待运行对话框出现\",\"params\":{\"durationMs\":800},\"dependencies\":[\"step1\"]},{\"id\":\"step3\",\"type\":\"gui_type\",\"description\":\"输入 notepad\",\"params\":{\"text\":\"notepad\"},\"dependencies\":[\"step2\"]},{\"id\":\"step4\",\"type\":\"gui_type\",\"description\":\"回车启动记事本\",\"params\":{\"text\":\"{ENTER}\"},\"dependencies\":[\"step3\"]},{\"id\":\"step5\",\"type\":\"wait\",\"description\":\"等待记事本加载\",\"params\":{\"durationMs\":2000},\"dependencies\":[\"step4\"]},{\"id\":\"step6\",\"type\":\"gui_type\",\"description\":\"输入文本\",\"params\":{\"text\":\"Hello from Mock Brain!\"},\"dependencies\":[\"step5\"]}]}"
+    },
+    {
+      "match": "在截图中查找",
+      "content": "{\"found\": false, \"elements\": []}"
+    },
+    {
+      "match": "分析这张截图",
+      "content": "{\"description\": \"mock-brain: 桌面状态正常\", \"elements\": [], \"actions\": []}"
+    },
+    {
+      "match": "计算器",
+      "content": "{\"steps\":[{\"id\":\"s1\",\"type\":\"cli_execute\",\"description\":\"启动计算器\",\"params\":{\"command\":\"start calc\"},\"dependencies\":[],\"expectedOutcome\":\"计算器窗口出现\"}]}"
+    }
+  ]
+}
