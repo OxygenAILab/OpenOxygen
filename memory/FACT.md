@@ -127,6 +127,28 @@
 
 **遗留待办**（未拍板）：VERSION.txt 旧版本号未对齐、CHANGELOG 滞后、水印追溯、P1 剩余 10 项（condition 恒真、F 键支持、buildDependencyMap 死状态等）、Anthropic/Gemini 的 systemPrompt 行为已在引擎层修复但未做 e2e（mock-brain 不含这两协议的 system 字段解析）。
 
+## v26.0-Alpha 2 发布与 P1 批次（2026-08-31）
+
+**Pre-Release 已发布**：https://github.com/OxygenAILab/OxygenClaw/releases/tag/v26.0-alpha.2
+- 版本对齐：package.json `26.0.0-alpha.2`、VERSION.txt 重写为 BC 方案、CHANGELOG 补齐 Alpha 2 条目
+- tag `v26.0-alpha.2` SSH 签名（ed25519，Good signature）；Pre-Release 附 dist.zip 构建产物 + 不稳定性声明
+- 基准（BC Pre-Release 门槛）：tsc 0、build OK、jest 全过、`scripts/benchmark-release.ts` 功能基准（单进程自起 mock-brain：Planner + 四供应商视觉，服务端 imgs=1 计数 4/4）
+- 基准内部用产品 `encodeBitmapToPng` 合成测试图（自包含 + dogfood）
+
+**P1 批次修复**（commit 9f777dd）：
+1. 错误分类：'Target is required'/'Cannot resolve target' 等配置错误先于元素定位判断（不再误分类为可重试的 ElementNotFound 白白重试 3 次）
+2. 重试按 attempt 取策略——delayMs 递增真正生效；timeoutMs 倍数接通到 executeGuiWaitFor（`params.timeout ?? step.timeoutMs ?? 30000`）
+3. memory_retrieve 如实报告 hit/miss（不再硬编码 retrieved:true）
+4. condition 步骤快速失败（之前恒真 then 分支 no-op 伪装成功）；死 evaluateCondition 删除
+5. planner：JSON.parse 防护 + steps 数组校验；依赖图改用 enrich 后步骤构建；identifyParallelGroups 死循环防护
+6. optimizePlan 恒等变换（mergeShortSteps 产出执行器不支持的 'parallel' 且破坏依赖边，实现前停用）
+7. 删除孤儿重复文件 src/inference/planner/index.ts（零消费者，携带相同缺陷）
+8. robot.ts：`+{TAB}` 剥大括号（与 ^/% 分支一致）；`{F1}-{F12}` 支持（正则 + keyMap）
+
+**关键教训（edit 静默丢失）**：callGemini 的 buildGeminiContents 接线 edit 曾报成功但未落盘——定义和单测都在、调用缺失，靠基准的服务端 imgs 计数才发现。**edit 后必须 grep/read 复核关键接线**；此前"4×imgs=1"报告有误（当时实为 3，gemini 缺图），已修正。jest 多 worker 在低内存（<3GB free）会 OOM（Zone Allocation failed），用 `--runInBand` + 清理残留 node 进程。
+
+**P1 剩余**（低优先级）：shouldContinueAfterFailure 忽略 failureAction、执行器共享可变状态（taskId/isRunning）、多显示器负坐标、robotjs 截图性能（bitmap→PNG 全量编码）。
+
 ## 架构决策记录（2026-07-27）
 
 **决策**：All-in TypeScript，Rust 仅作为性能加速库
