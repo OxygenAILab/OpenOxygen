@@ -89,7 +89,7 @@ export class PlanExecutor {
 
         // 失败处理
         if (!result.success) {
-          const handled = await this.handleFailure(step, result, context, session);
+          const handled = await this.handleFailure(step, result, context, session, results);
           if (!handled) {
             break;
           }
@@ -118,12 +118,14 @@ export class PlanExecutor {
   async *executeStream(plan: TaskPlan, session: SessionContext): AsyncGenerator<StepResult> {
     this.isRunning = true;
     const results: StepResult[] = [];
+    // executeStream 没有 execute() 构建的完整 context，构造最小可用上下文
+    const ctx = { taskId: plan.taskId || 'stream-task' } as ExecutionContext;
 
     for (const step of plan.steps) {
       if (!this.isRunning) break;
 
       // 检查依赖
-      const depsReady = await this.checkDependencies(step, results, null as any);
+      const depsReady = await this.checkDependencies(step, results, ctx);
       if (!depsReady) {
         const result: StepResult = {
           stepId: step.id,
@@ -139,7 +141,7 @@ export class PlanExecutor {
       }
 
       // 执行步骤
-      const result = await this.executeStep(step, null as any, session);
+      const result = await this.executeStep(step, ctx, session);
       results.push(result);
       yield result;
 
@@ -286,6 +288,13 @@ export class PlanExecutor {
     }
 
     const { target, text, clearFirst = false } = step.params;
+
+    // 空文本是静默 no-op 的根源：必须快速失败而非打出空串后虚报成功
+    if (typeof text !== 'string' || text.length === 0) {
+      throw new Error(
+        `gui_type step requires non-empty text (use gui_click for clicks, cli_execute for commands): step "${step.id}"`
+      );
+    }
 
     if (target) {
       const coords = await this.resolveGuiTarget(target);
@@ -564,15 +573,21 @@ export class PlanExecutor {
   ): Promise<boolean> {
     if (step.dependencies.length === 0) return true;
 
-    const completedIds = new Set(results.map(r => r.stepId));
-    return step.dependencies.every(dep => completedIds.has(dep) || 
-      results.find(r => r.stepId === dep)?.success);
+    // 依赖必须存在且成功：未执行或执行失败的依赖都不算满足
+    return step.dependencies.every(
+      dep => results.find(r => r.stepId === dep)?.success === true
+    );
   }
 
   /**
    * 验证步骤结果
+   * GUI 控制器以返回值 {success:false, error} 报告失败而非抛错，
+   * 必须在此识别，否则失败会被静默上报为成功。
    */
-  private async validateStep(_step: PlanStep, _result: any): Promise<{ success: boolean; error?: string }> {
+  private async validateStep(_step: PlanStep, result: any): Promise<{ success: boolean; error?: string }> {
+    if (result && typeof result === 'object' && result.success === false) {
+      return { success: false, error: result.error || 'action reported failure' };
+    }
     return { success: true };
   }
 
@@ -583,7 +598,8 @@ export class PlanExecutor {
     step: PlanStep,
     result: StepResult,
     context: ExecutionContext,
-    session: SessionContext
+    session: SessionContext,
+    results: StepResult[]
   ): Promise<boolean> {
     if (!result.error) {
       return false; // 没有错误信息，无法分析
@@ -608,7 +624,7 @@ export class PlanExecutor {
 
     // 获取恢复策略
     const strategy = getRecoveryStrategy(analysis, 1);
-    const maxRetries = Math.min(strategy.maxRetries, step.retryConfig.maxRetries);
+    const maxRetries = Math.min(strategy.maxRetries, step.retryConfig?.maxRetries ?? this.config.maxRetries);
 
     // 尝试智能重试
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -636,6 +652,12 @@ export class PlanExecutor {
       if (retryResult.success) {
         // 记录重试成功
         metrics.recordRetry(analysis.category, true);
+        // 用重试结果替换失败结果，否则最终报告与依赖检查仍看到原始失败
+        const idx = results.findIndex(r => r.stepId === step.id);
+        if (idx >= 0) {
+          results[idx] = retryResult;
+        }
+        session.storeResult(context.taskId, step.id, retryResult);
         return true;
       } else {
         // 记录重试失败

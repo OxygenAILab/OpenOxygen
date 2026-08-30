@@ -197,11 +197,22 @@ ${params.context ? `上下文: ${JSON.stringify(params.context)}` : ''}
 
     // 额外验证
     for (const step of enriched) {
-      // 验证 GUI 步骤必须有 target
-      if (step.type.startsWith('gui_') && step.type !== 'gui_screenshot') {
-        if (!step.params.target && step.type !== 'wait') {
-          console.warn(`警告: ${step.id} (${step.type}) 缺少 target 参数`);
+      // gui_type 必须有非空 text：空文本会在执行层产生零事件 no-op 却虚报成功
+      if (step.type === 'gui_type') {
+        const text = step.params?.text;
+        if (typeof text !== 'string' || text.trim().length === 0) {
+          throw new Error(
+            `${step.id} (gui_type) 缺少非空 text 参数（点击用 gui_click，命令用 cli_execute）`
+          );
         }
+      }
+
+      // 需要定位的 GUI 步骤必须有 target（键盘型 gui_type 和截图除外）
+      if (
+        (step.type === 'gui_click' || step.type === 'gui_wait_for') &&
+        !step.params.target
+      ) {
+        console.warn(`警告: ${step.id} (${step.type}) 缺少 target 参数`);
       }
 
       // 验证依赖关系

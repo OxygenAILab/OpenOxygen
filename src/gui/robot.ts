@@ -5,7 +5,85 @@
  * 安全性提升：类型校验，防注入攻击
  */
 
+import zlib from 'node:zlib';
 import robot from 'robotjs';
+
+// ── PNG 编码（零依赖，Node 内置 zlib）─────────────────────
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(buf: Buffer): number {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length, 0);
+  const typeBuf = Buffer.from(type, 'ascii');
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0);
+  return Buffer.concat([len, typeBuf, data, crc]);
+}
+
+/**
+ * 把 robotjs 的 BGRA 裸 bitmap 编码为合法 PNG（RGBA）。
+ * 之前直接返回 bitmap base64 冒充 PNG，下游 VLM 永远收到损坏图像。
+ */
+export function encodeBitmapToPng(
+  width: number,
+  height: number,
+  bgra: Buffer,
+  bytesPerPixel = 4
+): Buffer {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    throw new Error(`invalid bitmap dimensions: ${width}x${height}`);
+  }
+  const stride = width * bytesPerPixel;
+  if (bgra.length < stride * height) {
+    throw new Error(`bitmap too small: ${bgra.length} < ${stride * height}`);
+  }
+
+  // 每行前置 filter byte 0（None），BGRA -> RGBA
+  const raw = Buffer.alloc((width * 4 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    const rowStart = y * (width * 4 + 1);
+    raw[rowStart] = 0;
+    for (let x = 0; x < width; x++) {
+      const si = y * stride + x * bytesPerPixel;
+      const di = rowStart + 1 + x * 4;
+      raw[di] = bgra[si + 2]; // R
+      raw[di + 1] = bgra[si + 1]; // G
+      raw[di + 2] = bgra[si]; // B
+      raw[di + 3] = bytesPerPixel === 4 ? bgra[si + 3] : 0xff; // A
+    }
+  }
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // color type: RGBA
+  ihdr[10] = 0; // compression
+  ihdr[11] = 0; // filter
+  ihdr[12] = 0; // interlace
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', zlib.deflateSync(raw)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 export interface GuiActionResult {
   success: boolean;
@@ -232,15 +310,14 @@ export class RobotGuiController {
       const size = robot.getScreenSize();
       const img = robot.screen.capture(0, 0, size.width, size.height);
 
-      // robotjs 返回的是 bitmap 数据，需要转换为 PNG base64
-      // 简化实现：先返回占位，后续可用 sharp/jimp 库转换
-      const width = img.width;
-      const height = img.height;
-      const bytesPerPixel = img.bytesPerPixel;
-
-      // 创建简单的 base64（生产环境应使用 PNG 编码库）
-      const buffer = Buffer.from(img.image);
-      return buffer.toString('base64');
+      // robotjs 返回 BGRA 裸 bitmap，必须编码为真正的 PNG
+      // （此前直接返回 bitmap base64 冒充 PNG，下游 VLM 收到的是损坏图像）
+      return encodeBitmapToPng(
+        img.width,
+        img.height,
+        Buffer.from(img.image),
+        img.bytesPerPixel || 4
+      ).toString('base64');
     } catch (error) {
       throw new Error(`Screenshot failed: ${error instanceof Error ? error.message : String(error)}`);
     }
