@@ -106,6 +106,27 @@
 4. ⚠️ 文档语言（英文为主+中文副本）仅 docs/ALPHA1_RELEASE 遵守；CHANGELOG 滞后；水印规范未在代码中实施（追溯成本高，待拍板）
 5. ✅ 测试基建：jest 32/32、tsc 0 错误、mock-brain 四路由、真实 API 双通道脚本（test-real-api.ts）
 
+## P0 修复与仓库入库（2026-08-30 续）
+
+**P0 修复全落地**（commit abc2a50，jest 32→36 全过，tsc 0 错误）：
+1. `validateStep` 识别 `{success:false}` 动作结果——GUI 失败不再被虚报成功（失败上报链路打通，handleFailure 的智能重试从此真正生效）
+2. `checkDependencies` 要求依赖存在**且成功**——失败的依赖不再算满足
+3. gui_type 空 text 在计划校验（SimplePlanner）与执行层双重拒绝——no-op 假成功源头关闭
+4. `executeStream` 构造最小 context 替代 `null as any`——不再是必崩死路
+5. `handleFailure` 用重试成功结果替换 results 数组中的失败项（最终报告/依赖检查终于看到真实结果）；`retryConfig?.maxRetries` 空引用防护
+6. **robot.screenshot 真 PNG 编码**（零依赖 zlib 实现，BGRA→RGBA + CRC32）——System.Drawing 独立解码器交叉验证像素精确对应；视觉兜底链路打通的前提补齐
+7. SimplePlanner target 告警精确化（键盘型 gui_type 不再误报）
+
+**PNG 编码器位置**：`src/gui/robot.ts::encodeBitmapToPng`（exported），单测 `src/gui/robot-png.test.ts`（签名/IHDR/像素通道/IDAT 解压/IEND 全覆盖）。
+
+**仓库入库（BC 规范）**：
+- 远端已迁移：`origin = https://github.com/OxygenAILab/OxygenClaw`（旧 `StarsailsClover/OpenOxygen` 保留为 `upstream`）
+- 主版本分支 `v26.0`（BC 规范：Major Version 独立分支），基线 5 个分块提交 + P0 修复 1 个提交，**全部 SSH 签名验证通过**（ed25519）
+- main/next/v26.0 三分支已推送；`.claude/`、`.opencode-data/` 等会话目录已加入 .gitignore
+- 工作树清零（127 项 → 0）
+
+**遗留待办**（未拍板）：VERSION.txt 旧版本号未对齐、CHANGELOG 滞后、水印追溯、P1 剩余 10 项（condition 恒真、F 键支持、buildDependencyMap 死状态等）、Anthropic/Gemini 的 systemPrompt 行为已在引擎层修复但未做 e2e（mock-brain 不含这两协议的 system 字段解析）。
+
 ## 架构决策记录（2026-07-27）
 
 **决策**：All-in TypeScript，Rust 仅作为性能加速库
