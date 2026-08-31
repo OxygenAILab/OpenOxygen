@@ -19,4 +19,4 @@ Known Instability (Pre-Release):
 - P1 backlog: condition steps fail-fast, F-key combos, shared executor state
 
 License: MIT
-Repository: https://github.com/OxygenAILab/OxygenClaw
+Repository: https://github.com/OxygenAILab/OpenOxygen
