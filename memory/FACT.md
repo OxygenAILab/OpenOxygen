@@ -199,3 +199,31 @@
 4. ✅ 测试脚本：`scripts/test-planner-mock.ts`、`scripts/test-vision-mock.ts`
 
 **附带修复**：node_modules 迁移后损坏（jest-cli/build 空、fast-glob out/ 缺失）→ 删 node_modules 重装解决；补装 fs/manager.ts 缺失声明的 fast-glob/chokidar/archiver/unzipper。修复后 tsc 0 错误、jest 15/15 通过。
+
+## 仓库归属纠正与流程教训(2026-08-31)
+
+- **仓库归属**:OpenOxygen 代码归 OxygenAILab/OpenOxygen(组织内 2026-03 已存在的上游镜像,main 与本地同源);误建的 OxygenAILab/OxygenClaw 已整库删除,名字留给将来 Electron 方向项目。origin 现指向 OpenOxygen,upstream 保留 StarsailsClover/OpenOxygen。
+- **真实 API 视觉全链路通过**(网关上游恢复后复测):引擎文本+视觉双通道经 glm-5.3-flash 实测通过。
+- **P1/P2 收尾**:执行器实例级互斥(拒绝并发复用,消除跨运行串数据);this.taskId 字段删除(taskId 沿 context 线程化到定位方法);shouldContinueAfterFailure 尊重 step.failureAction(PlanStep 新增可选字段,注意与 ValidationRule.failureAction 同名不同义);validateCoord 允许负坐标(±10000,多显示器副屏)。
+- **流程教训(重要)**:
+  1. 严禁用 PowerShell Get-Content/Set-Content/[IO.File]::WriteAllText 重写源文件——PS5.1 把无 BOM UTF-8 按 GBK 误读,整文件中文乱码+BOM+模板字符串反引号被吞(两次事故:executor.ts 可 git 还原;agent-loop.ts 未提交只能靠上下文重建)。
+  2. 源文件修改只用 Edit 工具或 Write 工具;文本批处理用 Node 脚本(writeFileSync utf8 无 BOM),CRLF 文件先归一化再匹配多行锚点。
+  3. **Edit 工具报成功不等于落盘**:callGemini 接线、FACT.md 两次编辑均静默丢失——关键修改后必须 grep/read 复核,commit 后必须 git show 验证 blob。
+  4. 控制台 GBK 显示伪影不代表文件损坏,验编码用 Node readFileSync utf8 查关键字符串。
+  5. jest 多 worker 在 <3GB 可用内存会 V8 Zone OOM,用 --runInBand。
+
+## AgentLoop 主路径落地(2026-08-31 续)
+
+**架构转向(泽川明确要求)**:自然语言 → LLM 自主决定工具与动作(感知-决策-行动闭环),不再是"一次性脚本生成→盲执行"。SimplePlanner→PlanExecutor 降级为可选批处理模式。
+
+**新增 src/orchestrator/agent-loop.ts**(commit bf107a9):
+- 工具集 9 个:screenshot / uia_locate / click / type / key / scroll / cli / wait / finish;按可用能力裁剪 schema
+- 观察回环:截图作为带图 user 消息回填(OpenAI tool 消息不带图);UIA/CLI 输出作为 tool 消息回填
+- 防护:同一动作连续 3 次执行前拦截;连续两轮纯文本视为文字收尾;maxSteps 上限;瞬态错误退避重试
+- 历史瘦身:新截图入库前旧图替换为占位,防多轮累积超网关限制
+
+**引擎四 provider 工具支持**:InferenceRequest.tools(OpenAI 规范形);openai/ollama 透传、anthropic→input_schema、gemini→functionDeclarations;buildOpenAIMessages 映射 assistant.tool_calls + tool 消息(tool_call_id);callOllama 解析响应 tool_calls。anthropic/gemini 响应侧 tool_use 解析未做(按需补)。
+
+**网关关键发现(实测阈值)**:api.ldwnb666.xyz(NewAPI)对请求体 >~100KB 确定性 403 upstream_unavailable(96KB=200,128KB=403,5 连挂非抽奖);此前"间歇 403"全是大载荷轮次。对策已内置:截图 2x 降采样(1024 宽,~30KB,encodeBitmapToPng 第 5 参)+ 历史瘦身。泽川侧可选项:调网关上游 body 上限后可恢复全尺寸截图。
+
+**真实验证**:glm-5.3-flash 经 NewAPI 走 AgentLoop 2 步完成冒烟——真实截图、亲眼读出屏幕上的 OpenCode 窗口标题、cli echo 验证、finish 总结。jest 43/43(+6 AgentLoop 场景),tsc 0。
