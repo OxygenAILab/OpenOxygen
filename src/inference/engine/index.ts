@@ -31,6 +31,19 @@ export interface InferenceRequest {
   temperature?: number;
   systemPrompt?: string;
   stream?: boolean;
+  /** 工具声明（OpenAI 格式为规范形，各 provider 自动映射） */
+  tools?: ToolSchema[];
+}
+
+/** OpenAI 格式的函数工具声明（规范形） */
+export interface ToolSchema {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    /** JSON Schema */
+    parameters: Record<string, unknown>;
+  };
 }
 
 export interface InferenceResponse {
@@ -112,6 +125,9 @@ async function callOpenAICompatible(
       max_tokens: request.maxTokens ?? 2048,
       temperature: request.temperature ?? 0.7,
       stream: false,
+      ...(request.tools?.length
+        ? { tools: request.tools, tool_choice: 'auto' }
+        : {}),
     }),
   });
 
@@ -184,6 +200,15 @@ async function callAnthropic(
       system: systemPrompt,
       max_tokens: request.maxTokens ?? 2048,
       temperature: request.temperature ?? 0.7,
+      ...(request.tools?.length
+        ? {
+            tools: request.tools.map((t) => ({
+              name: t.function.name,
+              description: t.function.description,
+              input_schema: t.function.parameters,
+            })),
+          }
+        : {}),
     }),
   });
 
@@ -234,6 +259,19 @@ async function callGemini(
         contents,
         ...(request.systemPrompt
           ? { systemInstruction: { parts: [{ text: request.systemPrompt }] } }
+          : {}),
+        ...(request.tools?.length
+          ? {
+              tools: [
+                {
+                  functionDeclarations: request.tools.map((t) => ({
+                    name: t.function.name,
+                    description: t.function.description,
+                    parameters: t.function.parameters,
+                  })),
+                },
+              ],
+            }
           : {}),
         generationConfig: {
           maxOutputTokens: request.maxTokens ?? 2048,
@@ -318,7 +356,13 @@ type OpenAIContentPart =
 
 interface OpenAIMessage {
   role: string;
-  content: string | OpenAIContentPart[];
+  content: string | OpenAIContentPart[] | null;
+  tool_calls?: Array<{
+    id: string;
+    type: 'function';
+    function: { name: string; arguments: string };
+  }>;
+  tool_call_id?: string;
 }
 
 /** 按图片头部魔数判断 MIME 类型，未知时默认按 PNG 处理。 */
@@ -431,6 +475,22 @@ export function buildOpenAIMessages(
   systemPrompt?: string
 ): OpenAIMessage[] {
   const mapped: OpenAIMessage[] = messages.map((m) => {
+    // assistant 的工具调用请求 → OpenAI tool_calls 形状（AgentLoop 回环必需）
+    if (m.role === 'assistant' && m.toolCalls?.length) {
+      return {
+        role: 'assistant',
+        content: m.content || null,
+        tool_calls: m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
+      };
+    }
+    // 工具结果消息必须带 tool_call_id
+    if (m.role === 'tool') {
+      return { role: 'tool', tool_call_id: m.toolCallId ?? '', content: m.content };
+    }
     if (m.images && m.images.length > 0) {
       const parts: OpenAIContentPart[] = [];
       if (m.content) {
@@ -460,15 +520,17 @@ async function callOllama(
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      stream: false,
-      options: {
-        temperature: request.temperature ?? 0.7,
-        num_predict: request.maxTokens ?? 2048,
-      },
-    }),
+      body: JSON.stringify({
+        model: config.model,
+        messages,
+        stream: false,
+        options: {
+          temperature: request.temperature ?? 0.7,
+          num_predict: request.maxTokens ?? 2048,
+        },
+        // Ollama /api/chat 接受 OpenAI 格式的 tools 数组
+        ...(request.tools?.length ? { tools: request.tools } : {}),
+      }),
   });
 
   if (!response.ok) {
@@ -476,21 +538,30 @@ async function callOllama(
     throw new Error(`API error: ${response.status} - ${error}`);
   }
 
-  const data = await response.json() as {
-    message?: {
-      content?: string;
+    const data = await response.json() as {
+      message?: {
+        content?: string;
+        tool_calls?: Array<{ function: { name: string; arguments: unknown } }>;
+      };
     };
-  };
-  
-  return {
-    id: `resp_${Date.now()}`,
-    content: data.message?.content || '',
-    model: config.model,
-    provider: 'ollama',
-    durationMs: 0,
-    mode: request.mode || 'balanced',
-  };
-}
+
+    return {
+      id: `resp_${Date.now()}`,
+      content: data.message?.content || '',
+      toolCalls: data.message?.tool_calls?.map((t, i) => ({
+        id: `call_${Date.now()}_${i}`,
+        name: t.function.name,
+        arguments:
+          typeof t.function.arguments === 'string'
+            ? t.function.arguments
+            : JSON.stringify(t.function.arguments ?? {}),
+      })),
+      model: config.model,
+      provider: 'ollama',
+      durationMs: 0,
+      mode: request.mode || 'balanced',
+    };
+  }
 
 function getDefaultBaseUrl(provider: string): string {
   switch (provider) {

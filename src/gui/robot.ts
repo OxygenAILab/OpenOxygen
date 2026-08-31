@@ -36,31 +36,43 @@ function pngChunk(type: string, data: Buffer): Buffer {
 }
 
 /**
- * 把 robotjs 的 BGRA 裸 bitmap 编码为合法 PNG（RGBA）。
- * 之前直接返回 bitmap base64 冒充 PNG，下游 VLM 永远收到损坏图像。
+ * 把 robotjs 的 BGRA 裸 bitmap 编码为合法 PNG(RGBA)。
+ * 之前直接返回 bitmap base64 冒充 PNG,下游 VLM 永远收到损坏图像。
+ *
+ * @param downsample 降采样因子(2 = 2x2 合并为 1 像素,输出尺寸减半,数据量约 1/4)。
+ *                   VLM 定位 1024 宽足够,且大幅降低请求体体积
+ *                   (网关侧对 >~100KB 的请求体上游会拒收)。
  */
 export function encodeBitmapToPng(
   width: number,
   height: number,
   bgra: Buffer,
-  bytesPerPixel = 4
+  bytesPerPixel = 4,
+  downsample = 1
 ): Buffer {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
     throw new Error(`invalid bitmap dimensions: ${width}x${height}`);
+  }
+  const ds = Math.max(1, Math.floor(downsample));
+  const outW = Math.floor(width / ds);
+  const outH = Math.floor(height / ds);
+  if (outW === 0 || outH === 0) {
+    throw new Error(`bitmap too small for downsample ${ds}: ${width}x${height}`);
   }
   const stride = width * bytesPerPixel;
   if (bgra.length < stride * height) {
     throw new Error(`bitmap too small: ${bgra.length} < ${stride * height}`);
   }
 
-  // 每行前置 filter byte 0（None），BGRA -> RGBA
-  const raw = Buffer.alloc((width * 4 + 1) * height);
-  for (let y = 0; y < height; y++) {
-    const rowStart = y * (width * 4 + 1);
+  // 每行前置 filter byte 0(None),BGRA -> RGBA;降采样取每 ds×ds 块左上像素
+  const raw = Buffer.alloc((outW * 4 + 1) * outH);
+  for (let oy = 0; oy < outH; oy++) {
+    const rowStart = oy * (outW * 4 + 1);
     raw[rowStart] = 0;
-    for (let x = 0; x < width; x++) {
-      const si = y * stride + x * bytesPerPixel;
-      const di = rowStart + 1 + x * 4;
+    const sy = oy * ds;
+    for (let ox = 0; ox < outW; ox++) {
+      const si = sy * stride + ox * ds * bytesPerPixel;
+      const di = rowStart + 1 + ox * 4;
       raw[di] = bgra[si + 2]; // R
       raw[di + 1] = bgra[si + 1]; // G
       raw[di + 2] = bgra[si]; // B
@@ -69,8 +81,8 @@ export function encodeBitmapToPng(
   }
 
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
+  ihdr.writeUInt32BE(outW, 0);
+  ihdr.writeUInt32BE(outH, 4);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 6; // color type: RGBA
   ihdr[10] = 0; // compression
@@ -308,20 +320,22 @@ export class RobotGuiController {
   }
 
   /**
-   * 截图（返回 base64 PNG）
+   * 截图(返回 base64 PNG,2x 降采样至半宽以控制请求体体积与编码耗时)
    */
   async screenshot(): Promise<string> {
     try {
       const size = robot.getScreenSize();
       const img = robot.screen.capture(0, 0, size.width, size.height);
 
-      // robotjs 返回 BGRA 裸 bitmap，必须编码为真正的 PNG
-      // （此前直接返回 bitmap base64 冒充 PNG，下游 VLM 收到的是损坏图像）
+      // robotjs 返回 BGRA 裸 bitmap,必须编码为真正的 PNG 并降采样
+      // (此前直接返回 bitmap base64 冒充 PNG,下游 VLM 收到的是损坏图像;
+      //  且全尺寸 PNG 会超过网关 ~100KB 请求体上限)
       return encodeBitmapToPng(
         img.width,
         img.height,
         Buffer.from(img.image),
-        img.bytesPerPixel || 4
+        img.bytesPerPixel || 4,
+        2
       ).toString('base64');
     } catch (error) {
       throw new Error(`Screenshot failed: ${error instanceof Error ? error.message : String(error)}`);
