@@ -33,6 +33,8 @@ export interface PlanStep {
   timeoutMs: number;
   captureScreenshot: boolean;
   validation?: ValidationRule[];
+  /** 失败后动作（仅流式执行消费）：skip=失败后继续后续步骤；默认 abort */
+  failureAction?: 'skip' | 'abort';
 }
 
 export type StepType = 

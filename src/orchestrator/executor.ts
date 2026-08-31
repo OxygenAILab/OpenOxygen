@@ -49,8 +49,13 @@ export class PlanExecutor {
    * 执行计划
    */
   async execute(context: ExecutionContext, session: SessionContext): Promise<StepResult[]> {
+    // 实例级互斥:taskId/isRunning 是实例状态,并发复用同一实例会互相覆盖
+    if (this.isRunning) {
+      throw new Error(
+        'PlanExecutor is already running a plan; create a separate instance for concurrent execution'
+      );
+    }
     this.isRunning = true;
-    this.taskId = context.taskId; // 存储 taskId 供 locateByVision 等方法使用
     const results: StepResult[] = [];
 
     // 记录任务开始
@@ -116,6 +121,11 @@ export class PlanExecutor {
    * 流式执行
    */
   async *executeStream(plan: TaskPlan, session: SessionContext): AsyncGenerator<StepResult> {
+    if (this.isRunning) {
+      throw new Error(
+        'PlanExecutor is already running a plan; create a separate instance for concurrent execution'
+      );
+    }
     this.isRunning = true;
     const results: StepResult[] = [];
     // executeStream 没有 execute() 构建的完整 context，构造最小可用上下文
@@ -175,13 +185,13 @@ export class PlanExecutor {
 
       switch (step.type) {
         case 'gui_click':
-          result = await this.executeGuiClick(step);
+          result = await this.executeGuiClick(step, context.taskId);
           break;
         case 'gui_type':
-          result = await this.executeGuiType(step);
+          result = await this.executeGuiType(step, context.taskId);
           break;
         case 'gui_wait_for':
-          result = await this.executeGuiWaitFor(step);
+          result = await this.executeGuiWaitFor(step, context.taskId);
           break;
         case 'gui_screenshot':
           result = await this.executeGuiScreenshot(step);
@@ -259,7 +269,7 @@ export class PlanExecutor {
   /**
    * 执行 GUI 点击
    */
-  private async executeGuiClick(step: PlanStep): Promise<any> {
+  private async executeGuiClick(step: PlanStep, taskId: string): Promise<any> {
     if (!this.config.guiController) {
       throw new Error('GUI controller not available');
     }
@@ -267,7 +277,7 @@ export class PlanExecutor {
     const { target, button = 'left' } = step.params;
 
     // 解析目标
-    const coords = await this.resolveGuiTarget(target);
+    const coords = await this.resolveGuiTarget(target, taskId);
 
     // 执行点击（根据 button 类型选择方法）
     if (button === 'right') {
@@ -282,7 +292,7 @@ export class PlanExecutor {
   /**
    * 执行 GUI 输入
    */
-  private async executeGuiType(step: PlanStep): Promise<any> {
+  private async executeGuiType(step: PlanStep, taskId: string): Promise<any> {
     if (!this.config.guiController) {
       throw new Error('GUI controller not available');
     }
@@ -297,7 +307,7 @@ export class PlanExecutor {
     }
 
     if (target) {
-      const coords = await this.resolveGuiTarget(target);
+      const coords = await this.resolveGuiTarget(target, taskId);
       await this.config.guiController.click(coords.x, coords.y);
     }
 
@@ -313,7 +323,7 @@ export class PlanExecutor {
   /**
    * 等待 GUI 元素
    */
-  private async executeGuiWaitFor(step: PlanStep): Promise<any> {
+  private async executeGuiWaitFor(step: PlanStep, taskId: string): Promise<any> {
     if (!this.config.guiController) {
       throw new Error('GUI controller not available');
     }
@@ -325,7 +335,7 @@ export class PlanExecutor {
 
     while (Date.now() - start < timeout) {
       try {
-        const coords = await this.resolveGuiTarget(target);
+        const coords = await this.resolveGuiTarget(target, taskId);
         return { found: true, x: coords.x, y: coords.y };
       } catch {
         await this.delay(500);
@@ -476,7 +486,7 @@ export class PlanExecutor {
   /**
    * 解析 GUI 目标
    */
-  private async resolveGuiTarget(target: any): Promise<{ x: number; y: number }> {
+  private async resolveGuiTarget(target: any, taskId: string): Promise<{ x: number; y: number }> {
     if (!target) {
       throw new Error('Target is required');
     }
@@ -501,7 +511,7 @@ export class PlanExecutor {
 
           // 记录 fallback 事件
           logger.locatorFallback(
-            this.taskId || 'unknown',
+            taskId,
             'current',
             target,
             'UIA',
@@ -512,7 +522,7 @@ export class PlanExecutor {
       }
 
       // 第 2 级：视觉定位兜底（处理 UIA 拿不到的画面：canvas、游戏、图片按钮）
-      const visual = await this.locateByVision(target);
+      const visual = await this.locateByVision(target, taskId);
       if (visual) {
         // 记录 VLM 命中
         metrics.recordLocator('vlm', true);
@@ -529,7 +539,10 @@ export class PlanExecutor {
   /**
    * 视觉定位：截图 → VLM 找元素 → 返回 bounds 中心点
    */
-  private async locateByVision(description: string): Promise<{ x: number; y: number } | null> {
+  private async locateByVision(
+    description: string,
+    taskId: string
+  ): Promise<{ x: number; y: number } | null> {
     if (!this.config.guiController?.screenshot) {
       return null;
     }
@@ -544,7 +557,7 @@ export class PlanExecutor {
       const sizeKb = Math.round(Buffer.from(base64, 'base64').length / 1024);
 
       // 记录截图事件
-      logger.screenshot(this.taskId || 'unknown', 'locator', imagePath, sizeKb);
+      logger.screenshot(taskId, 'locator', imagePath, sizeKb);
 
       const element = await findElement(imagePath, description);
       if (!element || !element.bounds) {
@@ -557,8 +570,6 @@ export class PlanExecutor {
       return null;
     }
   }
-
-  private taskId: string | null = null;
 
   /**
    * 检查依赖
@@ -683,9 +694,11 @@ export class PlanExecutor {
   /**
    * 失败后是否继续
    */
-  private async shouldContinueAfterFailure(step: PlanStep, result: StepResult): Promise<boolean> {
-    // 检查步骤的 failureAction
-    return false;
+  private async shouldContinueAfterFailure(step: PlanStep, _result: StepResult): Promise<boolean> {
+    // 仅 executeStream 使用(execute 的失败走 handleFailure)。
+    // 'skip' -> 继续执行后续步骤;其余(abort/retry/rollback 及未设置) -> 终止。
+    // rollback/retry 在流式模式下无对应机制,按最保守的 abort 处理。
+    return step.failureAction === 'skip';
   }
 
   /**

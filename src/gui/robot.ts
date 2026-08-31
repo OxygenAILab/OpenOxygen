@@ -126,7 +126,9 @@ export class RobotGuiController {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       throw new Error(`Invalid coordinate: (${x}, ${y}) - must be finite numbers`);
     }
-    if (x < 0 || y < 0 || x > 10000 || y > 10000) {
+    // 允许负坐标：Windows 多显示器布局中副屏常位于主屏左侧/上方（负原点）。
+    // 此校验的目的是防注入/NaN，不是严格桌面边界，因此对称放宽到 ±10000。
+    if (x < -10000 || y < -10000 || x > 10000 || y > 10000) {
       throw new Error(`Coordinate out of bounds: (${x}, ${y})`);
     }
   }
