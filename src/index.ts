@@ -245,15 +245,20 @@ if (require.main === module) {
     const program = new Command();
 
     const createConfig = (options: any = {}): OpenOxygenConfig => {
-      const provider = options.provider || process.env.OPENOXYGEN_PROVIDER || process.env.LLM_PROVIDER || 'ollama';
+      const provider = options.provider || process.env.OPENOXYGEN_PROVIDER || process.env.LLM_PROVIDER || '';
       const method = options.method || process.env.OPENOXYGEN_METHOD;
-      const baseURL = options.url || process.env.OPENOXYGEN_BASE_URL || process.env.OPENAI_BASE_URL || process.env.ANTHROPIC_BASE_URL;
-      const apiKey = options.key || process.env.OPENOXYGEN_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || '';
-      const model = options.model || process.env.OPENOXYGEN_MODEL || process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || 'aikid123/qwen3-coder:latest';
+      const baseURL = options.url || process.env.OPENOXYGEN_BASE_URL || process.env.OPENAI_BASE_URL || process.env.ANTHROPIC_BASE_URL || process.env.OPENOXYGEN_PLANNER_BASE_URL;
+      const apiKey = options.key || process.env.OPENOXYGEN_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENOXYGEN_PLANNER_API_KEY || '';
+      const model = options.model || process.env.OPENOXYGEN_MODEL || process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || process.env.OPENOXYGEN_PLANNER_MODEL || 'aikid123/qwen3-coder:latest';
+      // provider 智能推断:显式指定优先;否则有远程 baseURL 按 OpenAI 兼容处理,
+      // 仅本机/11434 或无 URL 时默认 ollama(此前无脑默认 ollama 导致配远程 URL 必 404)
+      const resolvedProvider =
+        provider ||
+        (baseURL && !/localhost|127\.0\.0\.1|:11434/.test(baseURL) ? 'openai' : 'ollama');
 
       return {
         llm: {
-          provider: (method === 'OpenAIAPI' ? 'openai' : provider) as LLMConfig['provider'],
+          provider: (method === 'OpenAIAPI' ? 'openai' : resolvedProvider) as LLMConfig['provider'],
           apiKey,
           baseURL,
           model,
@@ -282,7 +287,55 @@ if (require.main === module) {
     program
       .name('openoxygen')
       .description('OpenOxygen v26 alpha - Computer Use Agent')
-      .version('26.0.0-alpha.1');
+      .version('26.0.0-alpha.2');
+
+    // ── agent:AgentLoop 主路径(感知-决策-行动闭环)──────────
+    program
+      .command('agent')
+      .description('Agentic loop: LLM observes (screenshot/UIA/cli output) and decides each tool call until finish')
+      .argument('<goal>', 'Natural language goal')
+      .option('--max-steps <n>', 'Max loop steps', '25')
+      .option('--temperature <t>', 'Sampling temperature', '0.2')
+      .option('--no-gui', 'Disable GUI tools (CLI-only run)')
+      .option('--no-cli', 'Disable CLI tools (GUI-only run)')
+      .option('--cli-timeout <ms>', 'CLI tool timeout (ms)', '60000')
+      .action(async (goal: string, options: any) => {
+        const { AgentLoop } = require('./orchestrator/agent-loop');
+        const cfg = createConfig(options);
+        const model = {
+          provider: (['openai', 'anthropic', 'gemini', 'ollama', 'openrouter', 'stepfun'].includes(cfg.llm.provider)
+            ? cfg.llm.provider
+            : 'openai') as 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'stepfun',
+          model: cfg.llm.model,
+          apiKey: cfg.llm.apiKey,
+          baseUrl: cfg.llm.baseURL,
+        };
+
+        // 懒加载 robotjs(仅 GUI 模式需要原生模块)
+        const gui = options.gui
+          ? new (require('./gui/robot').RobotGuiController)()
+          : undefined;
+        const cli = options.cli === false ? undefined : new NodeCliExecutor();
+
+        console.log(`[agent] goal: ${goal}`);
+        console.log(`[agent] model: ${model.provider}/${model.model} @ ${model.baseUrl || '(default)'}`);
+        console.log(`[agent] tools: ${gui ? 'gui+' : 'gui-'}${cli ? 'cli' : 'nocli'} max-steps=${options.maxSteps}\n`);
+
+        const result = await new AgentLoop().run({
+          goal,
+          model,
+          gui,
+          cli,
+          maxSteps: Number(options.maxSteps) || 25,
+          temperature: Number(options.temperature) || 0.2,
+          cliTimeoutMs: Number(options.cliTimeout) || 60000,
+        });
+
+        console.log(`\n[agent] ${result.success ? '✅ 成功' : '❌ 失败'} (steps=${result.steps})`);
+        if (result.summary) console.log(`[agent] ${result.summary}`);
+        if (result.error) console.error(`[agent] error: ${result.error}`);
+        if (!result.success) process.exitCode = 1;
+      });
 
     addLlmOptions(program.command('chat')
       .description('Chat with Ollama/OpenAI-compatible/Anthropic LLM')

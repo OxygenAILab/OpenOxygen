@@ -227,3 +227,5 @@
 **网关关键发现(实测阈值)**:api.ldwnb666.xyz(NewAPI)对请求体 >~100KB 确定性 403 upstream_unavailable(96KB=200,128KB=403,5 连挂非抽奖);此前"间歇 403"全是大载荷轮次。对策已内置:截图 2x 降采样(1024 宽,~30KB,encodeBitmapToPng 第 5 参)+ 历史瘦身。泽川侧可选项:调网关上游 body 上限后可恢复全尺寸截图。
 
 **真实验证**:glm-5.3-flash 经 NewAPI 走 AgentLoop 2 步完成冒烟——真实截图、亲眼读出屏幕上的 OpenCode 窗口标题、cli echo 验证、finish 总结。jest 43/43(+6 AgentLoop 场景),tsc 0。
+
+**CLI 一等入口**(Alpha 3 首块):openoxygen agent "目标" —— AgentLoop 经 commander 暴露,--no-gui/--no-cli/--max-steps/--temperature/--cli-timeout;robotjs 懒加载(纯 CLI 任务不加载原生模块);createConfig provider 按 baseURL 智能推断(修复远程 URL 默认 ollama 必 404 的老 bug,全部命令受益);.env PLANNER 变量纳入通用回退链。真实冒烟 --no-gui 2 步通过。
