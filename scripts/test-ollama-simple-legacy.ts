@@ -4,8 +4,8 @@
  * 测试自然语言交互和任务执行功能
  */
 
-import { LLMGateway } from './src/llm/gateway';
-import { OllamaManager } from './src/ollama/manager';
+import { LLMGateway } from '../src/llm/gateway';
+import { OllamaManager } from '../src/ollama/manager';
 
 async function main() {
   console.log('🚀 OpenOxygen Ollama 集成测试');

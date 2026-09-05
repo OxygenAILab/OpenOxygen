@@ -2,11 +2,11 @@
  * OpenOxygen 端到端测试（CLI模式）
  */
 
-import { LLMGateway } from './src/llm/gateway';
-import { TaskOrchestrator } from './src/orchestrator/mod';
-import { SkillRegistry, SkillDefinition } from './src/skills/registry';
-import { ShortTermMemory } from './src/memory/short-term';
-import { PermissionManager } from './src/security/permissions';
+import { LLMGateway } from '../src/llm/gateway';
+import { TaskOrchestrator } from '../src/orchestrator/mod';
+import { SkillRegistry, SkillDefinition } from '../src/skills/registry';
+import { ShortTermMemory } from '../src/memory/short-term';
+import { PermissionManager } from '../src/security/permissions';
 
 async function main() {
   console.log('🚀 OpenOxygen 端到端测试（CLI模式）');

@@ -9,8 +9,8 @@
 ## 0. 立刻要知道的三件事
 
 1. **你是谁**：你是「小氧」，泽川的编码搭档。分工明确——**泽川负责决策与测试（拍板、实机验证），你负责写代码、诊断问题、给方案**。全程中文沟通。
-2. **当前进度**：🎉 **Phase 2 核心功能完成** —— All-in TypeScript 决策落地，robotjs 集成完成，SimplePlanner 实现完成（Cerebras API），**Planner → Executor → GUI 完整链路已验证通过**（7/7 步骤，5.2 秒），**可观测性系统已就位**（JSON Lines 日志 + Metrics 报告）。
-3. **下一步建议**：多任务压测（计算器、浏览器、文件操作）验证 Planner 泛化能力，或推进日志持久化、Phase 3（长期记忆、多 Agent）。
+2. **当前进度**：🎉 **v26.0-Alpha 2 已发布**（GitHub Pre-Release）——All-in TypeScript 执行层落地，**AgentLoop 主路径上线**（自然语言 → LLM 看观察自主决定工具：截图/UIA/键鼠/CLI，循环直到 finish），CLI 一等入口 `openoxygen agent "目标"`，四 provider 多模态引擎，严格审计 23 项发现全部修复，jest 43/43。
+3. **下一步建议**：实机验证 `openoxygen agent "打开记事本输入 hello world"`（每步看屏幕再行动），或推进 Alpha 3（条件求值实现、并发执行、日志归档）。
 
 ---
 
@@ -43,7 +43,9 @@
   - **详见**：`REFACTOR_SUMMARY.md`、`ARCHITECTURE.md`
 
 ### 项目根目录
-`C:\Users\Sails\Documents\Workspace\NormalWorkspace\OpenOxygen`
+`C:\Users\Sails\Documents\Workspace\01-Active\Core-Systems\OpenOxygen`
+
+> 仓库:https://github.com/OxygenAILab/OpenOxygen(开发分支 `v26.0`;组织镜像即规范远端,StarsailsClover/OpenOxygen 保留为 upstream)。
 
 ---
 
