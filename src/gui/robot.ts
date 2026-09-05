@@ -6,6 +6,7 @@
  */
 
 import zlib from 'node:zlib';
+import { execFileSync } from 'node:child_process';
 import robot from 'robotjs';
 
 // ── PNG 编码（零依赖，Node 内置 zlib）─────────────────────
@@ -146,12 +147,35 @@ export class RobotGuiController {
   }
 
   /**
-   * 移动鼠标到指定坐标
+   * 平滑移动鼠标:ease-out 减速插值,替代瞬间跳变
+   * (实机观感:光标瞬移难以跟踪,平滑移动也便于人眼确认落点)
+   */
+  private async moveSmooth(x: number, y: number): Promise<void> {
+    const from = robot.getMousePos();
+    const dist = Math.hypot(x - from.x, y - from.y);
+    const steps = Math.min(28, Math.max(6, Math.round(dist / 45)));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const ease = 1 - (1 - t) * (1 - t); // ease-out quad:快起步缓减速
+      robot.moveMouse(
+        Math.round(from.x + (x - from.x) * ease),
+        Math.round(from.y + (y - from.y) * ease)
+      );
+      await this.sleep(Math.max(4, Math.round(14 * (1 - t))));
+    }
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * 移动鼠标到指定坐标(平滑)
    */
   async move_mouse(x: number, y: number): Promise<GuiActionResult> {
     try {
       this.validateCoord(x, y);
-      robot.moveMouse(Math.floor(x), Math.floor(y));
+      await this.moveSmooth(Math.floor(x), Math.floor(y));
       return { success: true };
     } catch (error) {
       return {
@@ -167,7 +191,7 @@ export class RobotGuiController {
   async click(x: number, y: number): Promise<GuiActionResult> {
     try {
       this.validateCoord(x, y);
-      robot.moveMouse(Math.floor(x), Math.floor(y));
+      await this.moveSmooth(Math.floor(x), Math.floor(y));
       robot.mouseClick('left');
       return { success: true };
     } catch (error) {
@@ -184,7 +208,7 @@ export class RobotGuiController {
   async right_click(x: number, y: number): Promise<GuiActionResult> {
     try {
       this.validateCoord(x, y);
-      robot.moveMouse(Math.floor(x), Math.floor(y));
+      await this.moveSmooth(Math.floor(x), Math.floor(y));
       robot.mouseClick('right');
       return { success: true };
     } catch (error) {
@@ -201,7 +225,7 @@ export class RobotGuiController {
   async double_click(x: number, y: number): Promise<GuiActionResult> {
     try {
       this.validateCoord(x, y);
-      robot.moveMouse(Math.floor(x), Math.floor(y));
+      await this.moveSmooth(Math.floor(x), Math.floor(y));
       robot.mouseClick('left', true); // double click
       return { success: true };
     } catch (error) {
@@ -217,17 +241,34 @@ export class RobotGuiController {
    *
    * 契约：整串为 SendKeys 组合键语法（如 "#r"、"^a"、"{ENTER}"）时
    * 自动路由到 key_press 执行按键，与 Planner 的 prompt 约定一致；
-   * 其余内容按字面文本输入。
+   * 其余内容走剪贴板粘贴通道。
+   *
+   * 为什么字面文本不用 typeString 逐键输入：中文 IME 激活时会拦截
+   * 逐键事件进入合成（实机复现："world" 被打成 "ddddd"）。
+   * 剪贴板粘贴（Set-Clipboard + ^v）完全绕开 IME，对任意 Unicode 安全。
    */
   async type_text(text: string): Promise<GuiActionResult> {
     try {
-      if (typeof text !== 'string') {
-        throw new Error('Text must be a string');
+      if (typeof text !== 'string' || text.length === 0) {
+        throw new Error('Text must be a non-empty string');
       }
       if (isSendKeysCombo(text)) {
         return await this.key_press(text);
       }
-      robot.typeString(text);
+
+      // 剪贴板粘贴通道:EncodedCommand 传参(base64 of UTF-16LE),任意字符零转义风险
+      const b64 = Buffer.from(text, 'utf16le').toString('base64');
+      const ps = `Set-Clipboard -Value ([System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${b64}')))`;
+      execFileSync(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')],
+        { timeout: 8000, windowsHide: true }
+      );
+      await this.sleep(60); // 剪贴板落稳
+      const paste = await this.key_press('^v');
+      if (!paste.success) {
+        return { success: false, error: `粘贴失败: ${paste.error}` };
+      }
       return { success: true };
     } catch (error) {
       return {
