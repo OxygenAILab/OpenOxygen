@@ -3,7 +3,7 @@
 > 2026-08-31 更新:本文档反映 All-in TypeScript 重构后的真实结构。
 > 旧版描述(Rust 执行层/Python 绑定层/Tauri 桌面端)已弃用,见 `ARCHITECTURE.md`。
 
-<!-- GitHub@NDBlockConnect | BlockConnect@StarsailsClover -->
+<!-- GitHub@OxygenAILab | OxygenAILab@StarsailsClover -->
 
 ## 项目概述
 

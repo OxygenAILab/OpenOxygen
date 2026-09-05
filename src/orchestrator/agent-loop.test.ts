@@ -32,8 +32,18 @@ const guiStub = {
   screenshots: [] as string[],
   clicks: [] as any[],
   keys: [] as string[],
+  screenSize: { width: 2048, height: 1152 },
   async screenshot() {
-    return 'FAKE_PNG_BASE64';
+    // 构造带合法 IHDR 的假 PNG(截图工具会解析宽高计算缩放因子)
+    const b = Buffer.alloc(26);
+    b.writeUInt32BE(13, 8);
+    b.write('IHDR', 12, 'ascii');
+    b.writeUInt32BE(1024, 16); // 截图宽
+    b.writeUInt32BE(576, 20); // 截图高
+    return b.toString('base64');
+  },
+  getScreenSize() {
+    return this.screenSize;
   },
   async click(x: number, y: number) {
     this.clicks.push([x, y]);
@@ -77,7 +87,8 @@ describe('AgentLoop', () => {
 
     expect(result.success).toBe(true);
     expect(result.summary).toBe('完成');
-    expect(guiStub.clicks).toEqual([[100, 200]]);
+    // 模型在截图坐标系点击 (100,200),截图 1024 宽/物理 2048 宽 → 物理坐标 (200,400)
+    expect(guiStub.clicks).toEqual([[200, 400]]);
     // 不变量:click(c2) 的工具结果被回填进后续上下文(数组引用会被后续轮次继续 push,故用 some)
     const toolMsgs = mockedRun.mock.calls[1][0].messages.filter((m) => m.role === 'tool');
     expect(toolMsgs.some((m) => m.toolCallId === 'c2')).toBe(true);
@@ -132,6 +143,35 @@ describe('AgentLoop', () => {
     expect(names).toContain('click');
     expect(names).toContain('finish');
     expect(names).not.toContain('cli');
+  });
+
+  it('坐标换算:截图坐标系点击自动乘缩放因子落到物理屏', async () => {
+    // guiStub: 截图 1024 宽 / 物理屏 2048 宽 → scale = 0.5
+    mockedRun
+      .mockResolvedValueOnce(resp({ toolCalls: [tool('screenshot', {}, 'cs')] }))
+      .mockResolvedValueOnce(resp({ toolCalls: [tool('click', { x: 100, y: 200 }, 'cc')] }))
+      .mockResolvedValueOnce(resp({ toolCalls: [tool('finish', { summary: 'done' }, 'cf')] }));
+
+    const loop = new AgentLoop();
+    await loop.run({ goal: '截图后点一下', model: { provider: 'openai', model: 'm' }, gui: guiStub });
+
+    // 截图系 (100,200) × (1/0.5) = 物理 (200,400)
+    expect(guiStub.clicks).toEqual([[200, 400]]);
+  });
+
+  it('uia_locate 返回物理坐标但换算为截图坐标系告知模型', async () => {
+    // locateByDescription 返回物理 (10,20),scale=0.5 → 截图坐标系应为 (5,10)(物理 × scale)
+    mockedRun
+      .mockResolvedValueOnce(resp({ toolCalls: [tool('screenshot', {}, 'cs')] }))
+      .mockResolvedValueOnce(resp({ toolCalls: [tool('uia_locate', { description: '按钮' }, 'cu')] }))
+      .mockImplementationOnce(async (req) => {
+        const toolMsg = req.messages.filter((m) => m.role === 'tool').pop();
+        expect(toolMsg?.content).toContain('(5, 10)');
+        return resp({ toolCalls: [tool('finish', { summary: 'ok' }, 'cf')] });
+      });
+
+    const loop = new AgentLoop();
+    await loop.run({ goal: '定位元素', model: { provider: 'openai', model: 'm' }, gui: guiStub });
   });
 
   it('cli 工具走执行器并回填输出', async () => {

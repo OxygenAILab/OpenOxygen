@@ -18,6 +18,7 @@ import { logger, metrics } from '../observability';
 /** AgentLoop 需要的 GUI 能力(RobotGuiController/WindowsGuiController 均满足) */
 export interface AgentLoopGui {
   screenshot?(): Promise<string>;
+  getScreenSize?(): { width: number; height: number };
   click(x: number, y: number): Promise<{ success: boolean; error?: string }>;
   right_click?(x: number, y: number): Promise<{ success: boolean; error?: string }>;
   double_click?(x: number, y: number): Promise<{ success: boolean; error?: string }>;
@@ -54,13 +55,25 @@ interface ToolExecution {
   finished?: boolean;
 }
 
+/** 工具执行上下文:含截图坐标系状态(click/ui_locate 的换算依赖它) */
+interface ToolContext {
+  gui?: AgentLoopGui;
+  cli?: AgentLoopOptions['cli'];
+  taskId: string;
+  cliTimeoutMs?: number;
+  /** 当前截图宽 / 物理屏宽(未截过图时为 1) */
+  screenScale: number;
+  screenPhysical: { width: number; height: number };
+  onScreenInfo: (info: { scale: number; physical: { width: number; height: number } }) => void;
+}
+
 export const AGENT_LOOP_SYSTEM_PROMPT = `你是 OpenOxygen,一个 Windows 桌面自动化 Agent。用户给你一个自然语言目标,你通过工具调用逐步完成它。
 
 决策原则:
 1. 行动前先观察:任务开始和界面不确定时,先调用 screenshot 看清当前状态再决定动作。
 2. 每轮一个动作,看到结果再做下一个决定。关键动作后用截图验证效果。
 3. 优先键盘方案(组合键 key 工具,SendKeys 语法: ^=Ctrl #=Win %=Alt +=Shift,{ENTER}/{TAB}/{F5} 等),比点击更可靠。
-4. 点击用 click(x,y):坐标来自截图观察或 uia_locate 定位。
+4. 点击用 click(x,y):**坐标一律使用最新截图里的像素坐标**(截图可能是物理屏的缩放视图,系统自动换算,无需关心缩放);uia_locate 返回的也是同一坐标系。
 5. 命令行任务用 cli(如启动程序 start notepad、查询文件)。
 6. 截图以 user 消息形式出现在你的下文中,基于最新一张图判断。
 7. 目标完成后调用 finish 并给出简短总结;卡住时也调用 finish 说明原因,不要无限重试同一动作。`;
@@ -215,6 +228,9 @@ export class AgentLoop {
     let nudges = 0;
     let lastActionHash: string | null = null;
     let repeatCount = 0;
+    /** 截图坐标系缩放因子:截图宽 / 物理屏宽。模型工作在截图坐标系,系统负责换算 */
+    let screenScale = 1;
+    let screenPhysical = { width: 0, height: 0 };
 
     try {
       for (let step = 1; step <= maxSteps && this.isRunning; step++) {
@@ -259,7 +275,18 @@ export class AgentLoop {
               };
             }
 
-            const exec = await this.executeTool(tc, { gui, cli, taskId, cliTimeoutMs: options.cliTimeoutMs });
+            const exec = await this.executeTool(tc, {
+              gui,
+              cli,
+              taskId,
+              cliTimeoutMs: options.cliTimeoutMs,
+              screenScale,
+              screenPhysical,
+              onScreenInfo: (info) => {
+                screenScale = info.scale;
+                screenPhysical = info.physical;
+              },
+            });
 
             messages.push({
               role: 'tool',
@@ -361,12 +388,7 @@ export class AgentLoop {
 
   private async executeTool(
     tc: ToolCallRequest,
-    ctx: {
-      gui?: AgentLoopGui;
-      cli?: AgentLoopOptions['cli'];
-      taskId: string;
-      cliTimeoutMs?: number;
-    }
+    ctx: ToolContext
   ): Promise<ToolExecution> {
     const started = Date.now();
     let args: any = {};
@@ -399,7 +421,7 @@ export class AgentLoop {
   private async dispatchTool(
     name: string,
     args: any,
-    ctx: { gui?: AgentLoopGui; cli?: AgentLoopOptions['cli']; taskId: string; cliTimeoutMs?: number }
+    ctx: ToolContext
   ): Promise<ToolExecution> {
     const gui = ctx.gui;
 
@@ -407,14 +429,33 @@ export class AgentLoop {
       case 'screenshot': {
         if (!gui?.screenshot) return { ok: false, payload: 'GUI 控制器不可用' };
         const base64 = await gui.screenshot();
-        return { ok: true, payload: `截图已捕获(${Math.round((base64.length * 3) / 4 / 1024)} KB),见下一条 user 消息`, image: base64 };
+        // 从 PNG IHDR 解析实际输出尺寸,计算与物理屏的缩放因子(非标准 PNG 时跳过,沿用旧 scale)
+        const buf = Buffer.from(base64, 'base64');
+        if (buf.length >= 24 && buf.toString('ascii', 12, 16) === 'IHDR') {
+          const pngW = buf.readUInt32BE(16);
+          const pngH = buf.readUInt32BE(20);
+          if (gui.getScreenSize && pngW > 0) {
+            const ps = gui.getScreenSize();
+            ctx.onScreenInfo({
+              scale: pngW / ps.width,
+              physical: { width: ps.width, height: ps.height },
+            });
+          }
+        }
+        return {
+          ok: true,
+          payload: `截图已捕获,见下一条 user 消息(click 坐标请直接使用该截图内的像素坐标)`,
+          image: base64,
+        };
       }
       case 'uia_locate': {
         if (!gui?.locateByDescription) return { ok: false, payload: 'UIA 定位不可用' };
         const found = await gui.locateByDescription(String(args.description ?? ''));
-        return found
-          ? { ok: true, payload: `找到元素,中心坐标 (${Math.round(found.x)}, ${Math.round(found.y)})` }
-          : { ok: false, payload: '未找到元素(可尝试 screenshot 后按坐标点击)' };
+        if (!found) return { ok: false, payload: '未找到元素(可尝试 screenshot 后按坐标点击)' };
+        // UIA 返回物理坐标 → 换算到截图坐标系(物理 × scale),模型全程只用一套坐标
+        const x = Math.round(found.x * ctx.screenScale);
+        const y = Math.round(found.y * ctx.screenScale);
+        return { ok: true, payload: `找到元素,截图坐标系中心坐标 (${x}, ${y})` };
       }
       case 'click': {
         if (!gui) return { ok: false, payload: 'GUI 控制器不可用' };
@@ -423,11 +464,19 @@ export class AgentLoop {
         if (!Number.isFinite(x) || !Number.isFinite(y)) {
           return { ok: false, payload: 'click 需要合法的数字坐标 x/y' };
         }
+        // 模型给的是截图坐标系 → 换算到物理屏幕坐标(截图 1024 宽/物理 2048 宽时 ÷0.5 = ×2)
+        const px = Math.round(x / ctx.screenScale);
+        const py = Math.round(y / ctx.screenScale);
         const button = args.button === 'right' ? gui.right_click?.bind(gui) : args.button === 'double' ? gui.double_click?.bind(gui) : null;
         const r = button
-          ? await button(x, y)
-          : await gui.click(x, y);
-        return { ok: r.success, payload: r.success ? `已点击 (${x}, ${y})` : `点击失败: ${r.error}` };
+          ? await button(px, py)
+          : await gui.click(px, py);
+        return {
+          ok: r.success,
+          payload: r.success
+            ? `已在截图坐标 (${x}, ${y}) ≈ 物理坐标 (${px}, ${py}) 点击`
+            : `点击失败: ${r.error}`,
+        };
       }
       case 'type': {
         if (!gui) return { ok: false, payload: 'GUI 控制器不可用' };
